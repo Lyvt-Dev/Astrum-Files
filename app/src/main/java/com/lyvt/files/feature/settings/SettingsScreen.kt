@@ -146,6 +146,18 @@ fun SettingsScreen(nav: NavHostController, vm: SettingsViewModel = hiltViewModel
             }
             item {
                 LyvtCard {
+                    SectionHeader("Security")
+                    val ctx = androidx.compose.ui.platform.LocalContext.current
+                    val activity = ctx as? androidx.fragment.app.FragmentActivity
+                    val available = com.lyvt.files.ui.appLockAvailable(ctx)
+                    Toggle("Fingerprint app lock", if (available) "Ask for your fingerprint when opening Astrum Files (device PIN works as fallback)"
+                        else "Set up a fingerprint or screen lock in Android settings first", s.appLock) { v ->
+                        // Confirm with the fingerprint before changing, so nobody else can switch it off.
+                        if (available && activity != null) com.lyvt.files.ui.promptAppLock(activity, if (v) "Enable app lock" else "Disable app lock", { vm.update { it.copy(appLock = v) } })
+                    }
+                    Text("Vault fingerprint unlock: open Vault → ⋮ → Enable biometric unlock (or accept the offer after creating the vault).",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.size(12.dp))
                     SectionHeader("Vault")
                     val opts = listOf(0 to "Immediately", 30 to "30 s", 60 to "1 min", 300 to "5 min", 900 to "15 min")
                     Text("Auto-lock after leaving the app", style = MaterialTheme.typography.labelLarge)

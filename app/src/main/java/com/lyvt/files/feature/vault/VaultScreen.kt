@@ -112,6 +112,7 @@ fun VaultScreen(nav: NavHostController, vm: VaultViewModel = hiltViewModel()) {
     val busy by vm.busy.collectAsStateWithLifecycle()
     val busyFraction by vm.busyFraction.collectAsStateWithLifecycle()
     val recovery by vm.recoveryCode.collectAsStateWithLifecycle()
+    var offerFingerprint by remember { mutableStateOf(false) }
     val snackbar = remember { SnackbarHostState() }
     LaunchedEffect(Unit) { vm.messages.collect { snackbar.showSnackbar(it) } }
 
@@ -136,7 +137,16 @@ fun VaultScreen(nav: NavHostController, vm: VaultViewModel = hiltViewModel()) {
                 Text(code, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceContainerHigh).padding(12.dp))
             }
-        }, confirmButton = { TextButton(onClick = { vm.recoveryCode.value = null }) { Text("I have saved it") } })
+        }, confirmButton = { TextButton(onClick = { vm.recoveryCode.value = null; offerFingerprint = true }) { Text("I have saved it") } })
+    }
+    val ctx = LocalContext.current
+    if (offerFingerprint && biometricAvailable(ctx) && !vm.repo.biometricEnrolled()) {
+        AlertDialog(onDismissRequest = { offerFingerprint = false }, icon = { Icon(Icons.Filled.Fingerprint, null) }, title = { Text("Unlock with fingerprint?") }, text = {
+            Text("Open the vault with your fingerprint instead of typing the PIN. The PIN and recovery code keep working.")
+        }, confirmButton = { TextButton(onClick = {
+            offerFingerprint = false
+            vm.repo.biometricCipher(forEnroll = true)?.let { c -> (ctx as? FragmentActivity)?.let { promptBiometric(it, c, "Enable fingerprint unlock", vm::biometricEnroll) { } } }
+        }) { Text("Enable") } }, dismissButton = { TextButton(onClick = { offerFingerprint = false }) { Text("Not now") } })
     }
 }
 
@@ -262,7 +272,7 @@ private fun UnlockedView(nav: NavHostController, vm: VaultViewModel, s: VaultSta
                                     DropdownMenuItem(text = { Text(stringResource(R.string.delete)) }, onClick = { dialog = "delete"; menu = false })
                                 } else {
                                     DropdownMenuItem(text = { Text("New folder") }, onClick = { dialog = "folder"; menu = false })
-                                    if (biometricAvailable(ctx)) DropdownMenuItem(text = { Text(if (vm.repo.biometricEnrolled()) "Disable biometric unlock" else "Enable biometric unlock") }, onClick = {
+                                    if (biometricAvailable(ctx)) DropdownMenuItem(text = { Text(if (vm.repo.biometricEnrolled()) "Disable fingerprint unlock" else "Enable fingerprint unlock") }, onClick = {
                                         menu = false
                                         if (vm.repo.biometricEnrolled()) vm.repo.disableBiometric()
                                         else vm.repo.biometricCipher(forEnroll = true)?.let { c -> (ctx as? FragmentActivity)?.let { promptBiometric(it, c, "Enable biometric unlock", vm::biometricEnroll) { } } }

@@ -67,7 +67,7 @@
     <string name="vault_setup">Tresor einrichten</string>
     <string name="vault_unlock">Entsperren</string>
     <string name="vault_pin">PIN</string>
-    <string name="vault_biometric">Biometrie verwenden</string>
+    <string name="vault_biometric">Mit Fingerabdruck entsperren</string>
     <string name="vault_recovery">Wiederherstellungscode</string>
     <string name="vault_add">Dateien hinzufügen</string>
     <string name="cleaner_duplicates">Doppelte Dateien</string>

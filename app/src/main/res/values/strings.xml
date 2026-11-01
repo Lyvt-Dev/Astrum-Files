@@ -68,7 +68,7 @@
     <string name="vault_setup">Set up your vault</string>
     <string name="vault_unlock">Unlock</string>
     <string name="vault_pin">PIN</string>
-    <string name="vault_biometric">Use biometrics</string>
+    <string name="vault_biometric">Unlock with fingerprint</string>
     <string name="vault_recovery">Recovery code</string>
     <string name="vault_add">Add files</string>
     <string name="cleaner_duplicates">Duplicate files</string>

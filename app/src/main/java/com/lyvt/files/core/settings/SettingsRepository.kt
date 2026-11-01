@@ -39,6 +39,7 @@ data class AppSettings(
     val scanExclusions: Set<String> = emptySet(),
     val protectedDirs: Set<String> = setOf("DCIM/Camera"),
     val startPage: String = "home",
+    val appLock: Boolean = false,
 ) {
     companion object {
         val DEFAULT_CARDS = listOf("storage", "categories", "quick", "recent", "favorites", "cleanup")
@@ -71,6 +72,7 @@ class SettingsRepository @Inject constructor(@ApplicationContext private val con
         val exclusions = stringPreferencesKey("scan_exclusions")
         val protected = stringPreferencesKey("protected_dirs")
         val startPage = stringPreferencesKey("start_page")
+        val appLock = booleanPreferencesKey("app_lock")
     }
 
     val settings: Flow<AppSettings> = context.dataStore.data.map { it.toSettings() }
@@ -101,6 +103,7 @@ class SettingsRepository @Inject constructor(@ApplicationContext private val con
         scanExclusions = this[K.exclusions]?.split('\n')?.filter { it.isNotBlank() }?.toSet() ?: emptySet(),
         protectedDirs = this[K.protected]?.split('\n')?.filter { it.isNotBlank() }?.toSet() ?: setOf("DCIM/Camera"),
         startPage = this[K.startPage] ?: "home",
+        appLock = this[K.appLock] ?: false,
     )
 
     suspend fun update(transform: (AppSettings) -> AppSettings) {
@@ -127,6 +130,7 @@ class SettingsRepository @Inject constructor(@ApplicationContext private val con
             p[K.exclusions] = s.scanExclusions.joinToString("\n")
             p[K.protected] = s.protectedDirs.joinToString("\n")
             p[K.startPage] = s.startPage
+            p[K.appLock] = s.appLock
         }
     }
 

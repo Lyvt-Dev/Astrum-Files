@@ -25,6 +25,12 @@ class MainActivity : FragmentActivity() {
 
     /** Route requested by a widget or shortcut; consumed by the navigation host. */
     val pendingRoute = mutableStateOf<String?>(null)
+    /** App-lock state: locked at start and again after 30 s in the background. */
+    val locked = mutableStateOf(true)
+    private var backgroundAt = 0L
+
+    override fun onStop() { super.onStop(); if (!isChangingConfigurations) backgroundAt = System.currentTimeMillis() }
+    override fun onStart() { super.onStart(); if (backgroundAt > 0 && System.currentTimeMillis() - backgroundAt > 30_000) locked.value = true }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
@@ -41,6 +47,7 @@ class MainActivity : FragmentActivity() {
                         // Plays once per launch (survives rotation), not when returning from background.
                         var intro by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(savedInstanceState == null) }
                         if (intro) com.lyvt.files.ui.SplashIntro(settings.reduceMotion) { intro = false }
+                        if (settings.appLock && locked.value && !intro) com.lyvt.files.ui.AppLockScreen { locked.value = false }
                     }
                 }
             }
