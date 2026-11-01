@@ -94,4 +94,14 @@
     <string name="show_hidden">Show hidden files</string>
     <string name="grid_view">Grid view</string>
     <string name="heuristic_note">Results are estimates from on-device analysis. Please review before deleting.</string>
+    <string name="widget_storage">Storage</string>
+    <string name="widget_quick">Quick access</string>
+    <string name="transfer">Transfer</string>
+    <string name="organizer">Organizer</string>
+    <string name="network">Network</string>
+    <string name="library">Collections</string>
+    <string name="devtools">Developer tools</string>
+    <string name="timeline">Storage timeline</string>
+    <string name="tools">Tools</string>
+    <string name="about">About Astrum Files</string>
 </resources>

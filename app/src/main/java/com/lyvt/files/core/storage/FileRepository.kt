@@ -35,6 +35,7 @@ class FileRepository @Inject constructor(
     private val recents: RecentDao,
     private val operations: OperationDao,
     val trash: TrashManager,
+    private val library: LibraryRepository,
 ) {
     val favoriteList = favorites.observe()
     fun recentFiles(limit: Int = 20) = recents.recent(limit)
@@ -73,6 +74,7 @@ class FileRepository @Inject constructor(
     suspend fun rename(path: String, newName: String): Result<File> = withContext(Dispatchers.IO) {
         runCatching { FileOperations.rename(File(path), newName) }.onSuccess {
             favorites.rename(path, it.absolutePath, it.name)
+            library.onMoved(path, it.absolutePath)
             scan(path, it.absolutePath)
         }.also { log("rename", "${File(path).name} → $newName", it.isSuccess) }
     }
@@ -84,6 +86,7 @@ class FileRepository @Inject constructor(
         val files = paths.map(::File)
         val r = if (move) FileOperations.move(files, File(dest), policy, onProgress) else FileOperations.copy(files, File(dest), policy, onProgress)
         log(if (move) "move" else "copy", "${files.size} item(s) → ${File(dest).name}", r !is OpResult.Failure)
+        if (move) files.forEach { f -> val t = File(dest, f.name); if (!f.exists() && t.exists()) library.onMoved(f.absolutePath, t.absolutePath) }
         scan(dest)
         r
     }

@@ -26,9 +26,11 @@ import androidx.compose.ui.unit.sp
 import com.lyvt.files.core.settings.AppSettings
 import com.lyvt.files.core.settings.ThemeMode
 
-/** Selectable accents. Index 0 is the signature Lyvt ice blue. */
+/** Selectable accents. Index 0 is Astrum Cosmic Purple. */
+val StarlightGold = Color(0xFFE8B95A)
+val DeepViolet = Color(0xFF42217D)
 val Accents = listOf(
-    Color(0xFF2F6BFF), Color(0xFF00A3A3), Color(0xFF7A5CFF), Color(0xFFE5487A), Color(0xFFF08A24), Color(0xFF2E9E5B),
+    Color(0xFF7548F8), Color(0xFF2F6BFF), Color(0xFF00A3A3), Color(0xFFE5487A), Color(0xFFE8B95A), Color(0xFF2E9E5B),
 )
 
 /** Category palette used across charts and file icons, tuned for both themes. */
@@ -42,15 +44,15 @@ val LocalLyvt = staticCompositionLocalOf { LyvtExtras(Color(0xFFE8F0FF), Color(0
 
 private fun light(accent: Color) = lightColorScheme(
     primary = accent, onPrimary = Color.White,
-    primaryContainer = Color(0xFFDDE7FF), onPrimaryContainer = Color(0xFF0B2A6B),
+    primaryContainer = Color(0xFFE9E1FF), onPrimaryContainer = Color(0xFF22105A),
     secondary = Color(0xFF4F5D78), secondaryContainer = Color(0xFFE6ECF7), onSecondaryContainer = Color(0xFF1B2537),
-    tertiary = Color(0xFF00A3A3),
-    background = Color(0xFFF7F9FC), onBackground = Color(0xFF0E1320),
-    surface = Color(0xFFF7F9FC), onSurface = Color(0xFF0E1320),
-    surfaceVariant = Color(0xFFEDF1F8), onSurfaceVariant = Color(0xFF5A6478),
+    tertiary = Color(0xFFB8862F),
+    background = Color(0xFFF8F9FC), onBackground = Color(0xFF0E1320),
+    surface = Color(0xFFF8F9FC), onSurface = Color(0xFF12111A),
+    surfaceVariant = Color(0xFFEFEDF7), onSurfaceVariant = Color(0xFF5E5A70),
     surfaceContainerLowest = Color.White, surfaceContainerLow = Color(0xFFFFFFFF),
-    surfaceContainer = Color(0xFFF1F4FA), surfaceContainerHigh = Color(0xFFEAEFF7), surfaceContainerHighest = Color(0xFFE3E9F3),
-    outline = Color(0xFFD3DAE6), outlineVariant = Color(0xFFE6EBF3),
+    surfaceContainer = Color(0xFFF2F0F9), surfaceContainerHigh = Color(0xFFECE9F5), surfaceContainerHighest = Color(0xFFE4E0F0),
+    outline = Color(0xFFD6D2E3), outlineVariant = Color(0xFFE8E5F1),
     error = Color(0xFFD93A3A),
 )
 
@@ -58,15 +60,15 @@ private fun dark(accent: Color) = darkColorScheme(
     primary = Color(
         red = (accent.red * 0.7f + 0.3f), green = (accent.green * 0.7f + 0.3f), blue = (accent.blue * 0.7f + 0.3f)
     ), onPrimary = Color(0xFF071634),
-    primaryContainer = Color(0xFF1C2D52), onPrimaryContainer = Color(0xFFD9E4FF),
-    secondary = Color(0xFFAFBBD3), secondaryContainer = Color(0xFF263042), onSecondaryContainer = Color(0xFFDCE3F1),
-    tertiary = Color(0xFF5ED6D6),
-    background = Color(0xFF0F1217), onBackground = Color(0xFFE5E9F0),
-    surface = Color(0xFF0F1217), onSurface = Color(0xFFE5E9F0),
-    surfaceVariant = Color(0xFF1D232D), onSurfaceVariant = Color(0xFF9AA5B8),
-    surfaceContainerLowest = Color(0xFF0B0D11), surfaceContainerLow = Color(0xFF161A21),
-    surfaceContainer = Color(0xFF1A1F27), surfaceContainerHigh = Color(0xFF212733), surfaceContainerHighest = Color(0xFF2A313E),
-    outline = Color(0xFF353D4B), outlineVariant = Color(0xFF262C37),
+    primaryContainer = Color(0xFF42217D), onPrimaryContainer = Color(0xFFE9E1FF),
+    secondary = Color(0xFFC4B7E8), secondaryContainer = Color(0xFF2A2440), onSecondaryContainer = Color(0xFFE6DFF8),
+    tertiary = Color(0xFFE8B95A),
+    background = Color(0xFF101018), onBackground = Color(0xFFECEAF4),
+    surface = Color(0xFF101018), onSurface = Color(0xFFECEAF4),
+    surfaceVariant = Color(0xFF1E1C2A), onSurfaceVariant = Color(0xFFA29DB8),
+    surfaceContainerLowest = Color(0xFF0B0B11), surfaceContainerLow = Color(0xFF17161F),
+    surfaceContainer = Color(0xFF1C1A26), surfaceContainerHigh = Color(0xFF24212F), surfaceContainerHighest = Color(0xFF2D2A3A),
+    outline = Color(0xFF3A3650), outlineVariant = Color(0xFF292637),
     error = Color(0xFFFF7A7A),
 )
 
@@ -102,8 +104,8 @@ fun LyvtTheme(settings: AppSettings, content: @Composable () -> Unit) {
         dark -> dark(accent)
         else -> light(accent)
     }
-    val extras = if (dark) LyvtExtras(Color(0xFF16233D), Color(0xFF0F1217), Color(0xFF6E7A90), settings.reduceMotion)
-    else LyvtExtras(Color(0xFFE3ECFF), Color(0xFFF7F9FC), Color(0xFF8A94A6), settings.reduceMotion)
+    val extras = if (dark) LyvtExtras(Color(0xFF1E1538), Color(0xFF101018), Color(0xFF6E6A85), settings.reduceMotion)
+    else LyvtExtras(Color(0xFFEDE6FF), Color(0xFFF8F9FC), Color(0xFF8A86A0), settings.reduceMotion)
     val density = LocalDensity.current
     CompositionLocalProvider(
         LocalLyvt provides extras,

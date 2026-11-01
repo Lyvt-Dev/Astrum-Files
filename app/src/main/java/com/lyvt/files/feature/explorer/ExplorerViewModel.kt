@@ -66,6 +66,9 @@ class ExplorerViewModel @Inject constructor(
     private val settingsRepo: SettingsRepository,
     val clipboard: AppClipboard,
     private val volumes: StorageVolumes,
+    @dagger.hilt.android.qualifiers.ApplicationContext private val appContext: android.content.Context,
+    val library: com.lyvt.files.core.storage.LibraryRepository,
+    private val searches: com.lyvt.files.core.database.SearchDao,
     savedState: SavedStateHandle,
 ) : ViewModel() {
     val rootPath = volumes.primaryRoot()
@@ -77,6 +80,12 @@ class ExplorerViewModel @Inject constructor(
 
     val settings = settingsRepo.settings.stateIn(viewModelScope, SharingStarted.Eagerly, AppSettings())
     val favorites = repo.favoriteList.map { l -> l.map { it.path }.toSet() }.stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
+
+    val searchHistory = searches.recent().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val collections = library.allCollections.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    fun saveSearch(q: String) = viewModelScope.launch { searches.upsert(com.lyvt.files.core.database.SearchEntity(q, saved = true)); emit("Search saved") }
+    fun forgetSearch(q: String) = viewModelScope.launch { searches.delete(q) }
+    fun clearSearchHistory() = viewModelScope.launch { searches.clearHistory() }
 
     private val _messages = MutableSharedFlow<String>(extraBufferCapacity = 8)
     val messages = _messages.asSharedFlow()
@@ -150,8 +159,21 @@ class ExplorerViewModel @Inject constructor(
         searchJob?.cancel()
         _ui.update { it.copy(searchText = text, searchResults = emptyList(), searching = text.isNotBlank()) }
         if (text.isBlank()) return
+        if (text.trim().startsWith("tag:")) {
+            val tag = text.trim().removePrefix("tag:").trim().lowercase()
+            searchJob = viewModelScope.launch(Dispatchers.IO) {
+                kotlinx.coroutines.delay(300)
+                library.pathsForTag(tag).collect { paths ->
+                    _ui.update { it.copy(searchResults = paths.map(::File).filter { f -> f.exists() }.map { f -> FileItem.from(f) }, searching = false) }
+                }
+            }
+            return
+        }
         val q = SearchQuery.parse(text, settings.value.showHidden)
         searchJob = viewModelScope.launch(Dispatchers.IO) {
+            kotlinx.coroutines.delay(350) // debounce typing
+            val existing = searchHistory.value.firstOrNull { it.query == text.trim() }
+            searches.upsert(com.lyvt.files.core.database.SearchEntity(text.trim(), saved = existing?.saved == true))
             FileSearch.search(File(_ui.value.path), q, settings.value.scanExclusions).collect { batch ->
                 _ui.update { it.copy(searchResults = (it.searchResults + batch).take(5000)) }
             }
@@ -229,5 +251,22 @@ class ExplorerViewModel @Inject constructor(
     }
 
     suspend fun folderSize(path: String) = repo.folderSize(path)
+
+    fun mergePdfs(paths: List<String>) {
+        opJob = viewModelScope.launch {
+            _ui.update { it.copy(operation = OperationState("Merging PDFs", null, true)) }
+            val sorted = paths.sortedWith { a, b -> com.lyvt.files.core.common.NaturalOrder.compare(File(a).name, File(b).name) }
+            val out = com.lyvt.files.core.storage.FileOperations.uniqueTarget(File(_ui.value.path), "merged.pdf")
+            val r = withContext(Dispatchers.IO) { runCatching { com.lyvt.files.core.pdf.PdfTools.init(appContext); com.lyvt.files.core.pdf.PdfTools.merge(sorted.map(::File), out) } }
+            _ui.update { it.copy(operation = null) }
+            emit(r.fold({ "Created ${out.name}" }, { it.message ?: "Merge failed" })); clearSelection(); reload()
+        }
+    }
+
+    fun setNote(path: String, text: String) = viewModelScope.launch { library.setNote(path, text) }
+    fun addTag(path: String, tag: String) = viewModelScope.launch { if (tag.isNotBlank()) library.addTag(path, tag) }
+    fun removeTag(path: String, tag: String) = viewModelScope.launch { library.removeTag(path, tag) }
+    fun addToCollection(id: Long, paths: List<String>) = viewModelScope.launch { library.addToCollection(id, paths); emit("Added to collection") }
+    fun newCollection(name: String, paths: List<String>) = viewModelScope.launch { val id = library.createCollection(name); library.addToCollection(id, paths); emit("Created \"$name\"") }
     fun mime(item: FileItem) = repo.mimeType(item.file)
 }

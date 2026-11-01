@@ -66,6 +66,8 @@ class VaultViewModel @Inject constructor(val repo: VaultRepository) : ViewModel(
     fun delete(entries: List<VaultEntry>) = viewModelScope.launch { repo.delete(entries); _messages.emit("Deleted ${entries.size} item(s) from vault") }
     fun createFolder(name: String) = viewModelScope.launch { repo.createFolder(name) }
     fun moveTo(entries: List<VaultEntry>, folder: String) = viewModelScope.launch { repo.moveTo(entries, folder) }
+    fun setUpDecoy(pin: String) = viewModelScope.launch { runCatching { repo.setUpDecoy(pin.toCharArray()) }.onSuccess { _messages.emit("Decoy vault created. Unlocking with that PIN opens an empty, separate vault.") }.onFailure { _messages.emit(it.message ?: "Failed") } }
+    fun removeDecoy() { repo.removeDecoy(); viewModelScope.launch { _messages.emit("Decoy vault removed") } }
     fun changePin(pin: String) = viewModelScope.launch { runCatching { repo.changePin(pin.toCharArray()) }.onSuccess { _messages.emit("PIN changed") } }
 
     fun backup() = viewModelScope.launch {

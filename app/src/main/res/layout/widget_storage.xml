@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@+id/w_root"
+    android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical"
+    android:background="@drawable/widget_bg" android:padding="16dp">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical">
+        <ImageView android:layout_width="28dp" android:layout_height="28dp" android:src="@mipmap/ic_launcher" android:contentDescription="@null" />
+        <TextView android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:layout_marginStart="10dp"
+            android:text="@string/storage" android:textColor="@color/widget_text" android:textSize="14sp" android:textStyle="bold" />
+        <TextView android:id="@+id/w_clean" android:layout_width="wrap_content" android:layout_height="wrap_content" android:background="@drawable/widget_chip"
+            android:paddingHorizontal="12dp" android:paddingVertical="6dp" android:text="@string/nav_cleaner" android:textColor="@color/brand" android:textSize="12sp" />
+    </LinearLayout>
+    <TextView android:id="@+id/w_percent" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="8dp"
+        android:text="—" android:textColor="@color/widget_text" android:textSize="28sp" android:textStyle="bold" />
+    <ProgressBar android:id="@+id/w_bar" style="@android:style/Widget.ProgressBar.Horizontal" android:layout_width="match_parent"
+        android:layout_height="8dp" android:max="100" android:progressTint="@color/brand" android:layout_marginTop="4dp" />
+    <TextView android:id="@+id/w_detail" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp"
+        android:textColor="@color/widget_sub" android:textSize="12sp" android:maxLines="1" />
+</LinearLayout>

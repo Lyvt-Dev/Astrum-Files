@@ -23,8 +23,8 @@ android {
         applicationId = "com.lyvt.files"
         minSdk = 29
         targetSdk = 36
-        versionCode = 4
-        versionName = "0.1.3"
+        versionCode = 5
+        versionName = "0.2.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -59,7 +59,10 @@ android {
     kotlin { compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) } }
     buildFeatures { compose = true; buildConfig = true }
     testOptions { unitTests.isReturnDefaultValues = true }
-    packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }
+    packaging {
+        resources.excludes += setOf("/META-INF/{AL2.0,LGPL2.1}", "META-INF/versions/9/OSGI-INF/MANIFEST.MF", "META-INF/DEPENDENCIES",
+            "META-INF/LICENSE*", "META-INF/NOTICE*", "META-INF/INDEX.LIST", "META-INF/*.kotlin_module")
+    }
 }
 
 ksp { arg("room.schemaLocation", "$projectDir/schemas") }
@@ -88,6 +91,16 @@ dependencies {
     implementation(libs.androidx.biometric)
     implementation(libs.coroutines.android)
     implementation(libs.zip4j)
+    implementation(libs.splashscreen)
+    implementation(libs.work.runtime)
+    implementation(libs.hilt.work)
+    ksp(libs.hilt.work.compiler)
+    implementation(libs.pdfbox)
+    implementation(libs.zxing)
+    implementation(libs.sshj)
+    implementation(libs.commons.net)
+    implementation(libs.smbj)
+    implementation(libs.okhttp)
     implementation(libs.commons.compress)
     implementation(libs.xz)
     implementation(libs.media3.exoplayer)
@@ -97,8 +110,14 @@ dependencies {
     debugImplementation(libs.compose.ui.test.manifest)
 
     testImplementation(libs.junit)
+    testImplementation("org.json:json:20240303")
     testImplementation(libs.coroutines.test)
     androidTestImplementation(platform(libs.compose.bom))
     androidTestImplementation(libs.compose.ui.test.junit4)
     androidTestImplementation(libs.androidx.test.ext)
+}
+
+// smbj pulls an older BouncyCastle artifact that duplicates sshj's; keep the newer jdk18on one.
+configurations.all {
+    listOf("bcprov-jdk15to18", "bcutil-jdk15to18", "bcpkix-jdk15to18").forEach { exclude(group = "org.bouncycastle", module = it) }
 }

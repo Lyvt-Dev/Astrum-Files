@@ -93,4 +93,14 @@
     <string name="show_hidden">Versteckte Dateien anzeigen</string>
     <string name="grid_view">Rasteransicht</string>
     <string name="heuristic_note">Die Ergebnisse sind Schätzungen einer Analyse auf dem Gerät. Bitte vor dem Löschen prüfen.</string>
+    <string name="widget_storage">Speicher</string>
+    <string name="widget_quick">Schnellzugriff</string>
+    <string name="transfer">Übertragen</string>
+    <string name="organizer">Organisieren</string>
+    <string name="network">Netzwerk</string>
+    <string name="library">Sammlungen</string>
+    <string name="devtools">Entwicklertools</string>
+    <string name="timeline">Speicherverlauf</string>
+    <string name="tools">Werkzeuge</string>
+    <string name="about">Über Astrum Files</string>
 </resources>

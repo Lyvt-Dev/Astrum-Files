@@ -82,6 +82,7 @@ fun ImageViewerScreen(nav: NavHostController, path: String) {
     var info by remember { mutableStateOf(false) }
     var menu by remember { mutableStateOf(false) }
     var slideshow by remember { mutableStateOf(false) }
+    var convert by remember { mutableStateOf(false) }
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val ctx = LocalContext.current
@@ -116,6 +117,7 @@ fun ImageViewerScreen(nav: NavHostController, path: String) {
                             menu = false
                             scope.launch { snackbar.showSnackbar(withContext(Dispatchers.IO) { saveTransformed(current, rotation, "square") }) }
                         })
+                        DropdownMenuItem(text = { Text("Compress / convert…") }, onClick = { menu = false; convert = true })
                         DropdownMenuItem(text = { Text("Set as wallpaper") }, onClick = {
                             menu = false
                             scope.launch {
@@ -129,6 +131,7 @@ fun ImageViewerScreen(nav: NavHostController, path: String) {
         }
         SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).navigationBarsPadding())
     }
+    if (convert) ConvertDialog(current, rotation, onDone = { msg -> convert = false; scope.launch { snackbar.showSnackbar(msg) } }, onDismiss = { convert = false })
     if (info) {
         val rows = remember(current) { exifRows(current) }
         AlertDialog(onDismissRequest = { info = false }, title = { Text(current.name) }, text = {
@@ -193,3 +196,40 @@ fun shareFile(ctx: android.content.Context, f: File) {
         ctx.startActivity(android.content.Intent.createChooser(i, f.name))
     }
 }
+
+@Composable
+private fun ConvertDialog(src: File, rotation: Int, onDone: (String) -> Unit, onDismiss: () -> Unit) {
+    var format by remember { mutableStateOf("JPEG") }
+    var quality by remember { mutableFloatStateOf(80f) }
+    var maxSide by remember { mutableFloatStateOf(0f) }
+    val scope = rememberCoroutineScope()
+    AlertDialog(onDismissRequest = onDismiss, title = { Text("Compress / convert") }, text = {
+        Column {
+            Text("Original: ${Formatters.size(src.length())}. A new file is created; the original is kept.", style = MaterialTheme.typography.bodySmall)
+            Row { listOf("JPEG", "PNG", "WEBP").forEach { f -> TextButton(onClick = { format = f }) { Text(if (format == f) "● $f" else f) } } }
+            if (format != "PNG") { Text("Quality ${quality.toInt()}"); androidx.compose.material3.Slider(quality, { quality = it }, valueRange = 10f..100f) }
+            Text(if (maxSide < 1f) "Keep resolution" else "Longest side ${maxSide.toInt()} px")
+            androidx.compose.material3.Slider(maxSide, { maxSide = it }, valueRange = 0f..4096f)
+        }
+    }, confirmButton = { TextButton(onClick = { scope.launch { onDone(withContext(Dispatchers.IO) { convertImage(src, rotation, format, quality.toInt(), maxSide.toInt()) }) } }) { Text("Save") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } })
+}
+
+private fun convertImage(src: File, rotation: Int, format: String, quality: Int, maxSide: Int): String = runCatching {
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }; BitmapFactory.decodeFile(src.path, bounds)
+    var sample = 1
+    if (maxSide > 0) while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= maxSide) sample *= 2
+    var bmp = BitmapFactory.decodeFile(src.path, BitmapFactory.Options().apply { inSampleSize = sample }) ?: error("Cannot decode image")
+    if (maxSide > 0 && maxOf(bmp.width, bmp.height) > maxSide) {
+        val k = maxSide.toFloat() / maxOf(bmp.width, bmp.height); bmp = Bitmap.createScaledBitmap(bmp, (bmp.width * k).toInt(), (bmp.height * k).toInt(), true)
+    }
+    if (rotation != 0) bmp = Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, Matrix().apply { postRotate(rotation.toFloat()) }, true)
+    val (cf, ext) = when (format) {
+        "PNG" -> Bitmap.CompressFormat.PNG to "png"
+        "WEBP" -> (if (android.os.Build.VERSION.SDK_INT >= 30) Bitmap.CompressFormat.WEBP_LOSSY else @Suppress("DEPRECATION") Bitmap.CompressFormat.WEBP) to "webp"
+        else -> Bitmap.CompressFormat.JPEG to "jpg"
+    }
+    val target = FileOperations.uniqueTarget(src.parentFile!!, "${src.nameWithoutExtension}_converted.$ext")
+    target.outputStream().use { bmp.compress(cf, quality, it) }
+    "Saved ${target.name} · ${Formatters.size(src.length())} → ${Formatters.size(target.length())}"
+}.getOrElse { "Conversion failed: ${it.message}" }

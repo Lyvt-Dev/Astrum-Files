@@ -62,7 +62,9 @@ private const val MAX_PREVIEW = 8L * 1024 * 1024
 object SyntaxHighlighter {
     private val keywords = setOf("fun", "val", "var", "class", "object", "interface", "if", "else", "when", "for", "while", "return", "import", "package",
         "public", "private", "protected", "static", "void", "int", "new", "def", "function", "const", "let", "true", "false", "null", "None", "True", "False",
-        "try", "catch", "finally", "throw", "override", "suspend", "data", "enum", "struct", "from", "as", "in", "is", "this", "self", "extends", "implements")
+        "try", "catch", "finally", "throw", "override", "suspend", "data", "enum", "struct", "from", "as", "in", "is", "this", "self", "extends", "implements",
+        "namespace", "using", "include", "define", "template", "typename", "auto", "public:", "private:", "async", "await", "export", "type", "readonly",
+        "echo", "then", "fi", "do", "done", "esac", "elif", "lambda", "yield", "with", "pass", "char", "bool", "double", "float", "long", "string", "var")
     private val token = Regex("""("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')|(//[^\n]*|#[^\n]*)|(\b\d+(?:\.\d+)?\b)|(\b[A-Za-z_]\w*\b)|(<\/?[A-Za-z][^>]*>)""")
 
     fun highlight(text: String, ext: String, dark: Boolean): AnnotatedString {
@@ -101,6 +103,8 @@ fun TextViewerScreen(nav: NavHostController, path: String) {
     var find by remember { mutableStateOf("") }
     var replace by remember { mutableStateOf("") }
     var confirmLeave by remember { mutableStateOf(false) }
+    var preview by remember { mutableStateOf(false) }
+    val ext = file.extension.lowercase()
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val dark = MaterialTheme.colorScheme.background.red < 0.5f
@@ -143,6 +147,11 @@ fun TextViewerScreen(nav: NavHostController, path: String) {
                 Text(file.name + if (dirty) " •" else "", style = MaterialTheme.typography.titleMedium, maxLines = 1)
                 Text("${text.lines().size} lines" + if (editing) " · editing" else "", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+            if (ext == "md" || ext == "markdown") TextButton(onClick = { preview = !preview }) { Text(if (preview) "Source" else "Preview") }
+            if (ext in setOf("json", "xml") && original != null) TextButton(onClick = {
+                runCatching { formatStructured(text, ext) }.onSuccess { text = it; if (!editing) scope.launch { snackbar.showSnackbar("Formatted — enable editing and save to keep it") } }
+                    .onFailure { scope.launch { snackbar.showSnackbar("Invalid ${ext.uppercase()}: ${it.message}") } }
+            }) { Text("Format") }
             IconButton(onClick = { findOpen = !findOpen }) { Icon(Icons.Filled.FindReplace, "Find and replace") }
             if (original != null && file.length() <= MAX_EDITABLE && file.canWrite()) IconButton(onClick = { editing = !editing }) { Icon(Icons.Filled.Edit, "Edit") }
             if (dirty) IconButton(onClick = { save() }) { Icon(Icons.Filled.Save, "Save") }
@@ -157,6 +166,11 @@ fun TextViewerScreen(nav: NavHostController, path: String) {
         }
         error?.let { Text(it, Modifier.padding(24.dp), color = MaterialTheme.colorScheme.error); return@Column }
         if (original == null) { Text("Loading…", Modifier.padding(24.dp)); return@Column }
+        if (preview) {
+            Text(MarkdownRenderer.render(text, MaterialTheme.colorScheme.primary), style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp))
+            return@Column
+        }
         val lines = text.count { it == '\n' } + 1
         val style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp, lineHeight = 19.sp, color = MaterialTheme.colorScheme.onSurface)
         Row(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
@@ -187,5 +201,55 @@ private class HighlightTransformation(val ext: String, val dark: Boolean, val fi
             }
         }
         return TransformedText(out, OffsetMapping.Identity)
+    }
+}
+
+fun formatStructured(text: String, ext: String): String = if (ext == "json") {
+    val t = text.trim()
+    if (t.startsWith("[")) org.json.JSONArray(t).toString(2) else org.json.JSONObject(t).toString(2)
+} else {
+    val src = javax.xml.transform.stream.StreamSource(java.io.StringReader(text))
+    val out = java.io.StringWriter()
+    val tf = javax.xml.transform.TransformerFactory.newInstance().apply { runCatching { setFeature(javax.xml.XMLConstants.FEATURE_SECURE_PROCESSING, true) } }
+    tf.newTransformer().apply {
+        setOutputProperty(javax.xml.transform.OutputKeys.INDENT, "yes")
+        setOutputProperty("{http://xml.apache.org/xslt}indent-amount", "2")
+    }.transform(src, javax.xml.transform.stream.StreamResult(out))
+    out.toString()
+}
+
+/** Lightweight Markdown renderer: headings, bold, italic, inline code, code blocks, lists, quotes, links (text only). */
+object MarkdownRenderer {
+    fun render(md: String, accent: Color): AnnotatedString = buildAnnotatedString {
+        var inCode = false
+        md.lines().forEach { raw ->
+            if (raw.trimStart().startsWith("```")) { inCode = !inCode; return@forEach }
+            if (inCode) { pushStyle(SpanStyle(fontFamily = FontFamily.Monospace, background = Color(0x22888888))); append(raw); pop(); append("\n"); return@forEach }
+            val h = Regex("^(#{1,6})\\s+(.*)").find(raw)
+            when {
+                h != null -> { val lvl = h.groupValues[1].length; pushStyle(SpanStyle(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, fontSize = (26 - lvl * 2).sp, color = if (lvl <= 2) accent else Color.Unspecified)); inline(h.groupValues[2]); pop() }
+                raw.trimStart().startsWith("> ") -> { pushStyle(SpanStyle(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic, color = Color.Gray)); append("▎ "); inline(raw.trimStart().removePrefix("> ")); pop() }
+                Regex("^\\s*[-*+]\\s+").containsMatchIn(raw) -> { append("  •  "); inline(raw.replaceFirst(Regex("^\\s*[-*+]\\s+"), "")) }
+                Regex("^\\s*\\d+\\.\\s+").containsMatchIn(raw) -> { append("  "); inline(raw.trimStart()) }
+                raw.trim() == "---" || raw.trim() == "***" -> append("────────────")
+                else -> inline(raw)
+            }
+            append("\n")
+        }
+    }
+    private val inlineRe = Regex("""(\*\*[^*]+\*\*)|(`[^`]+`)|(\*[^*]+\*|_[^_]+_)|(\[([^\]]+)\]\(([^)]+)\))""")
+    private fun AnnotatedString.Builder.inline(s: String) {
+        var last = 0
+        inlineRe.findAll(s).forEach { m ->
+            append(s.substring(last, m.range.first))
+            when {
+                m.groups[1] != null -> { pushStyle(SpanStyle(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)); append(m.value.trim('*')); pop() }
+                m.groups[2] != null -> { pushStyle(SpanStyle(fontFamily = FontFamily.Monospace, background = Color(0x22888888))); append(m.value.trim('`')); pop() }
+                m.groups[3] != null -> { pushStyle(SpanStyle(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)); append(m.value.trim('*', '_')); pop() }
+                m.groups[4] != null -> { pushStyle(SpanStyle(color = Color(0xFF7548F8), textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline)); append(m.groupValues[5]); pop() }
+            }
+            last = m.range.last + 1
+        }
+        append(s.substring(last))
     }
 }

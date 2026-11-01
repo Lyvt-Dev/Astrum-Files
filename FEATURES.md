@@ -7,8 +7,8 @@
 - ⬜ Not started
 - 🚫 Unsupported by design or by platform
 
-**Verification status of this build:** `assembleDebug` ✔, `testDebugUnitTest` ✔ (32 tests), `lintDebug` ✔ (0 errors).
-No emulator or device run yet, because the build host has no KVM.
+**Verification status (0.2.0):** `assembleDebug` ✔, signed `assembleRelease` (R8) ✔, `testDebugUnitTest` ✔ (38 tests), `lintDebug` ✔ (0 errors).
+The user has run 0.1.x on a physical phone. 0.2.0 has **not** been run on a device yet, because the build host has no KVM.
 
 ## Milestone 1: Foundation
 | Feature | Status | Notes |
@@ -19,6 +19,7 @@ No emulator or device run yet, because the build host has no KVM.
 | Five-section navigation (Home, Files, Cleaner, Analytics, Vault) | ✅ | Bottom bar on phones, navigation rail at ≥600dp |
 | Edge-to-edge, predictive back (`enableOnBackInvokedCallback`) | ✅ | |
 | Permission onboarding (all-files access, or limited media mode) | ✅ | |
+| Astrum branding (logo icon, splash screen, purple/gold palette) | ✅ | |
 | Custom font (Manrope / Plus Jakarta Sans) | ⬜ | Uses the system sans-serif with a tuned type scale. The font file is not bundled yet. |
 | EN + DE localisation | 🟡 | Navigation and core strings are in `values/` and `values-de/`. Many dialog and feature strings are still hard-coded English. |
 
@@ -46,7 +47,7 @@ No emulator or device run yet, because the build host has no KVM.
 | Drag and drop | ⬜ | |
 | Background (WorkManager) transfers that survive process death | ⬜ | Transfers currently run in `viewModelScope` |
 | Storage Access Framework tree browsing (no all-files access) | ⬜ | |
-| Bookmarked/saved searches | ⬜ | |
+| Search history and saved searches, `tag:` search | ✅ | |
 
 ## Milestone 3: Feature parity
 | Feature | Status | Notes |
@@ -60,6 +61,7 @@ No emulator or device run yet, because the build host has no KVM.
 | Download cleaner (APKs, partial downloads, old downloads), screenshots by day | ✅ | |
 | Unused apps (UsageStats, explains missing permission) | ✅ | Launcher apps only |
 | Cleaner safety: review list, savings estimate, confirmation, trash, protected folders, exclusions, cancel | ✅ | |
+| Redundant archive finder | ✅ | Archive with an extracted sibling folder |
 | Scan history | ⬜ | |
 | Analytics: device vs inspectable storage, category donut, treemap, extension bars, largest files, duplicate waste, trend | ✅ | Trend uses snapshots taken at most every 6 hours when Home opens |
 | Folder drill-down from charts | ✅ | Opens the folder in Files |
@@ -71,30 +73,37 @@ No emulator or device run yet, because the build host has no KVM.
 | RAR | 🚫 | Proprietary format, and there is no maintained, permissively licensed extractor |
 | Trash: restore, original path, date, sort, multi-select, retention, size limit, stats | ✅ | |
 | Android MediaStore trash integration | ⬜ | |
+| Image compress / convert (JPEG, PNG, WebP, resize) | ✅ | Always a new file |
 | Image viewer: zoom, double tap, swipe gallery, rotate, EXIF, slideshow, share, crop (square), save edited copy, wallpaper | ✅ | Free-form crop is not implemented |
 | Video/music player (Media3): background service, notification and lock screen, speed, sleep timer, queue, shuffle/repeat, PiP, gestures, resume, track selection | ✅ | Codec support is whatever the device provides. No bundled decoders. |
 | Album artwork / music library browsing | 🟡 | Shown by Media3's PlayerView when embedded. There is no dedicated library screen. |
 | Playlists persisted | ⬜ | Queue = files in the same folder |
 | PDF: page render, zoom, rotate, bookmarks, info, print, share | ✅ | |
-| PDF text search / selection | 🚫 | Not supported by `PdfRenderer` before API 35 |
+| PDF merge / split / extract / rotate copy / metadata / text search | ✅ | PdfBox-Android. Search finds pages but does not highlight. No text selection. |
 | Text/code editor: highlighting, line numbers, find and replace, safe save | ✅ | Up to 2 MB editable, 8 MB viewable |
 | Office document preview (docx/xlsx) | ⬜ | Opens in external apps |
 
 ## Milestone 4: Advanced
-| Feature | Status |
-|---|---|
-| SFTP / WebDAV / SMB clients, saved connections, credential encryption | ⬜ |
-| Phone-to-PC transfer (QR pairing, token-authenticated, expiring) | ⬜ |
-| Automation rules (preview, dry run, schedule, history) | ⬜ |
-| Tags and labels | 🟡 Database schema and DAO only, no UI |
-| Collections, saved searches, home-screen shortcuts, widgets | ⬜ |
-| APK metadata viewer | ⬜ |
-| QR-code sharing | ⬜ |
+| Feature | Status | Notes |
+|---|---|---|
+| SFTP / SMB / WebDAV / FTP clients, saved connections, Keystore-encrypted credentials | ✅ | Browse, upload (SAF picker), download to Download/Astrum, rename, delete, mkdir, progress, cancel, connection test |
+| Background (WorkManager) network transfers | ⬜ | Transfers run while the screen is open |
+| Astrum Transfer: QR pairing, token auth, expiry, approval, multi-file, history, resumable downloads, NSD discovery | ✅ | Plain HTTP (see SECURITY.md). Folder transfer means selecting the files. |
+| Encrypted transfer channel (TLS) | ⬜ | |
+| Smart Organizer: rules, templates, dry-run preview, approval, undo, daily automatic runs | 🧪 | |
+| Collections, tags, notes (Room), export/import, move tracking, missing-file relink | ✅ | |
+| Storage widget, quick-access widget | ✅ | |
+| Recent-files / favorite-folders widgets | ⬜ | |
+| Developer inspector, JSON/XML format, Markdown preview, encoding detection | 🧪 / ✅ | |
+| Decoy vault | ✅ | |
+| Mini-player for background audio | ✅ | |
+| Storage timeline (used/free/files/category growth) | ✅ | Real snapshots only |
+| QR-code sharing of single files | 🟡 | Via Astrum Transfer session |
 
 ## Milestone 5: Quality
 | Feature | Status |
 |---|---|
-| JVM unit tests: file ops, copy/move/conflicts, search, natural sort, batch rename, duplicates, scanner, vault crypto, archive security | 🧪 32 tests |
+| JVM unit tests: file ops, copy/move/conflicts, search, natural sort, batch rename, duplicates, scanner, vault crypto, archive security | 🧪 38 tests (adds organizer, encoding, PDF page spec) |
 | Compose UI tests, instrumentation tests | ⬜ |
 | Settings: theme, Material You, accent, font size, density, grid, reduced motion, sorting, start page, hidden files, thumbnails, trash retention/limit, vault lock, exclusions, protected dirs, settings backup/restore | ✅ |
 | Accessibility audit (TalkBack labels, contrast) | 🟡 Content descriptions on key controls; no full audit yet |

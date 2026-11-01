@@ -29,6 +29,8 @@ import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.SdCard
@@ -105,8 +107,12 @@ fun HomeScreen(nav: NavHostController, vm: HomeViewModel = hiltViewModel()) {
         item {
             Row(Modifier.statusBarsPadding().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text("Astrum Files", style = MaterialTheme.typography.headlineMedium)
-                    Text("Everything on this device, organised.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        androidx.compose.foundation.Image(androidx.compose.ui.res.painterResource(com.lyvt.files.R.drawable.astrum_logo), null, Modifier.size(36.dp).clip(RoundedCornerShape(10.dp)))
+                        Spacer(Modifier.width(10.dp))
+                        Text("Astrum Files", style = MaterialTheme.typography.headlineMedium)
+                    }
+                    Text("Your files, in orbit.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 IconButton(onClick = { customize = true }) { Icon(Icons.Filled.Tune, "Customize dashboard") }
                 IconButton(onClick = { nav.navigate(Routes.SETTINGS) }) { Icon(Icons.Filled.Settings, stringResource(R.string.settings)) }
@@ -173,8 +179,9 @@ fun HomeScreen(nav: NavHostController, vm: HomeViewModel = hiltViewModel()) {
                             Triple(stringResource(R.string.apps), FileCategory.APK.icon() to FileCategory.APK.color()) { nav.navigate(Routes.files(root, "type:apk")) },
                             Triple(stringResource(R.string.trash) + if (trash.first > 0) " ${trash.first}" else "", Icons.Filled.Delete to FileCategory.OTHER.color()) { nav.navigate(Routes.TRASH) },
                             Triple(stringResource(R.string.nav_vault), Icons.Outlined.Lock to Accents[2]) { nav.navigate(Routes.VAULT) },
-                            Triple("History", Icons.Filled.History to Accents[1]) { nav.navigate(Routes.HISTORY) },
-                            Triple(stringResource(R.string.nav_cleaner), Icons.Filled.AutoAwesome to Accents[3]) { nav.navigate(Routes.CLEANER) },
+                            Triple(stringResource(R.string.transfer), Icons.Filled.Share to Accents[1]) { nav.navigate(Routes.TRANSFER) },
+                            Triple(stringResource(R.string.tools), Icons.Filled.Apps to Accents[4]) { nav.navigate(Routes.TOOLS) },
+                            Triple(stringResource(R.string.organizer), Icons.Filled.AutoAwesome to Accents[3]) { nav.navigate(Routes.ORGANIZER) },
                         )
                         LyvtCard(padding = 12.dp) {
                             tiles.chunked(4).forEachIndexed { i, row ->

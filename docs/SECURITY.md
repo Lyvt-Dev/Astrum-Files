@@ -47,13 +47,34 @@
 
 ## Privacy
 
-- No `INTERNET` permission in the current build, so no network traffic of any kind.
+- Network access is only used by features the user starts (servers, transfer). There is no telemetry.
 - No ads, analytics, crash reporters or third-party SDKs that phone home.
 - `allowBackup=false` and data-extraction rules exclude all app data from cloud backup and device transfer.
 - Package visibility is limited to launcher apps through `<queries>`. `QUERY_ALL_PACKAGES` is not requested.
 
-## Future network features
+## Decoy vault
 
-When SFTP, WebDAV, SMB and phone-to-PC transfer are added, credentials will be encrypted with a Keystore key. The
-PC-transfer server will require a per-session random token from the QR code, expire automatically, and never serve
-files without confirmation on the phone.
+The decoy is a fully separate space (`filesDir/vault-decoy`) with its own random master key, salts and Keystore alias.
+Unlocking first tries the real PIN, then the decoy PIN, so both paths take the same PBKDF2 work. The decoy holds no
+key material of the real vault. Limitation: the decoy hides content, not existence. A forensic look at app storage
+shows that two vault folders exist.
+
+## Network
+
+- Passwords are encrypted with a non-exportable Keystore AES-256-GCM key (`astrum_network_credentials`).
+- **SFTP:** the host key fingerprint is shown on first connect and pinned only after you approve it. A changed key is
+  refused as a possible MITM.
+- **WebDAV over HTTPS** uses the system trust store. Certificate errors are reported and never bypassed.
+- **FTP** is plaintext and labelled insecure in the UI.
+- **SMB:** smbj with default (SMB2/3) dialect negotiation.
+
+## Astrum Transfer
+
+- A local HTTP server on a random port bound to the LAN address. A 128-bit random token in the URL/QR code is
+  required for every request.
+- Sessions expire after 15 minutes. Repeated wrong-token requests from an address are blocked.
+- Every upload must be accepted on the phone (2-minute timeout means decline). Uploads never overwrite and are written
+  via `.lyvtpart` files.
+- **Limitation:** traffic is plain HTTP, so it is not encrypted on the wire. Anyone sniffing the same Wi-Fi could read
+  transferred files and the token. Use it on trusted networks. TLS with certificate pinning through the QR code is
+  planned.

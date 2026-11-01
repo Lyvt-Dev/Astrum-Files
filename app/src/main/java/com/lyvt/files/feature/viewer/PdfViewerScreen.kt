@@ -86,6 +86,18 @@ fun PdfViewerScreen(nav: NavHostController, path: String) {
     val prefs = ctx.getSharedPreferences("pdf_bookmarks", Context.MODE_PRIVATE)
     var bookmarks by remember { mutableStateOf(prefs.getStringSet(path, emptySet())!!.mapNotNull { it.toIntOrNull() }.toSortedSet()) }
     val page = list.firstVisibleItemIndex
+    var tool by remember { mutableStateOf<String?>(null) }
+    var toolStatus by remember { mutableStateOf<String?>(null) }
+    var meta by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
+    var hits by remember { mutableStateOf<List<Pair<Int, String>>?>(null) }
+    androidx.compose.runtime.LaunchedEffect(path) {
+        com.lyvt.files.core.pdf.PdfTools.init(ctx)
+        meta = withContext(Dispatchers.IO) { runCatching { com.lyvt.files.core.pdf.PdfTools.metadata(file) }.getOrDefault(emptyList()) }
+    }
+    fun runTool(block: suspend () -> String) = scope.launch {
+        toolStatus = "Working…"
+        toolStatus = withContext(Dispatchers.IO) { runCatching { block() }.getOrElse { "Failed: ${it.message}" } }
+    }
 
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceContainer)) {
         Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).statusBarsPadding().padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -106,9 +118,17 @@ fun PdfViewerScreen(nav: NavHostController, path: String) {
                     DropdownMenuItem(text = { Text("Document info") }, onClick = { info = true; menu = false })
                     DropdownMenuItem(text = { Text("Share") }, onClick = { shareFile(ctx, file); menu = false })
                     DropdownMenuItem(text = { Text("Print") }, onClick = { print(ctx, file); menu = false })
+                    DropdownMenuItem(text = { Text("Search text") }, onClick = { tool = "search"; menu = false })
+                    DropdownMenuItem(text = { Text("Extract pages…") }, onClick = { tool = "extract"; menu = false })
+                    DropdownMenuItem(text = { Text("Split into single pages") }, onClick = { menu = false; runTool { "Created ${com.lyvt.files.core.pdf.PdfTools.split(file).size} files" } })
+                    DropdownMenuItem(text = { Text("Save rotated copy") }, enabled = rotation != 0, onClick = { menu = false
+                        runTool { val out = com.lyvt.files.core.storage.FileOperations.uniqueTarget(file.parentFile!!, "${file.nameWithoutExtension}_rotated.pdf")
+                            com.lyvt.files.core.pdf.PdfTools.rotate(file, rotation, out); "Saved ${out.name}" } })
                 }
             }
         }
+        toolStatus?.let { st -> Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.primaryContainer).padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(st, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f)); TextButton(onClick = { toolStatus = null }) { Text("OK") } } }
         if (renderer == null) {
             Text("Cannot open this PDF: ${holder.exceptionOrNull()?.message ?: "it may be corrupted or password-protected"}", Modifier.padding(24.dp), color = MaterialTheme.colorScheme.error)
             return@Column
@@ -136,9 +156,16 @@ fun PdfViewerScreen(nav: NavHostController, path: String) {
             }
         }
     }
+    PdfToolDialogs(tool, file, renderer?.pageCount ?: 0, onDismiss = { tool = null },
+        onSearch = { q -> scope.launch { toolStatus = "Searching…"; val r = withContext(Dispatchers.IO) { runCatching { com.lyvt.files.core.pdf.PdfTools.search(file, q) } }
+            toolStatus = r.fold({ if (it.isEmpty()) "No text matches (scanned PDFs contain no text)" else null }, { "Search failed: ${it.message}" }); hits = r.getOrNull()?.takeIf { it.isNotEmpty() } } },
+        onExtract = { spec -> runTool { val pages = com.lyvt.files.core.pdf.PdfTools.parsePages(spec, renderer?.pageCount ?: 0)
+            require(pages.isNotEmpty()) { "No valid pages" }
+            val out = com.lyvt.files.core.storage.FileOperations.uniqueTarget(file.parentFile!!, "${file.nameWithoutExtension}_pages.pdf")
+            com.lyvt.files.core.pdf.PdfTools.extract(file, pages, out); "Saved ${out.name} (${pages.size} pages)" } })
+    PdfHits(hits, onJump = { p -> scope.launch { list.scrollToItem(p) } }, onDismiss = { hits = null })
     if (info && renderer != null) AlertDialog(onDismissRequest = { info = false }, title = { Text("Document") }, text = {
-        Text("Pages: ${renderer.pageCount}\nSize: ${Formatters.size(file.length())}\nModified: ${Formatters.date(file.lastModified())}\nPath: ${file.absolutePath}\n\n" +
-            "Text search and selection are not available with the system PDF renderer on all Android versions.")
+        Text("Size: ${Formatters.size(file.length())}\nPath: ${file.absolutePath}\n\n" + meta.joinToString("\n") { "${it.first}: ${it.second}" })
     }, confirmButton = { TextButton(onClick = { info = false }) { Text("OK") } })
     if (jump && renderer != null) AlertDialog(onDismissRequest = { jump = false }, title = { Text("Go to") }, text = {
         LazyColumn {
@@ -148,6 +175,14 @@ fun PdfViewerScreen(nav: NavHostController, path: String) {
             items(renderer.pageCount) { p -> TextButton(onClick = { scope.launch { list.scrollToItem(p) }; jump = false }) { Text("Page ${p + 1}") } }
         }
     }, confirmButton = {})
+}
+
+@Composable
+private fun PdfHits(hits: List<Pair<Int, String>>?, onJump: (Int) -> Unit, onDismiss: () -> Unit) {
+    if (hits == null) return
+    AlertDialog(onDismissRequest = onDismiss, title = { Text("${hits.size} page(s) found") }, text = {
+        LazyColumn { items(hits.size) { i -> val (p, snip) = hits[i]; TextButton(onClick = { onJump(p); onDismiss() }) { Text("Page ${p + 1}: …$snip…", maxLines = 2) } } }
+    }, confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } })
 }
 
 private fun print(ctx: Context, file: File) {
@@ -162,4 +197,15 @@ private fun print(ctx: Context, file: File) {
                 .onSuccess { cb.onWriteFinished(arrayOf(PageRange.ALL_PAGES)) }.onFailure { cb.onWriteFailed(it.message) }
         }
     }, null)
+}
+
+@Composable
+private fun PdfToolDialogs(tool: String?, file: File, pageCount: Int, onDismiss: () -> Unit, onSearch: (String) -> Unit, onExtract: (String) -> Unit) {
+    var input by remember(tool) { mutableStateOf("") }
+    if (tool == null) return
+    AlertDialog(onDismissRequest = onDismiss, title = { Text(if (tool == "search") "Search text" else "Extract pages") }, text = {
+        androidx.compose.material3.OutlinedTextField(input, { input = it }, singleLine = true,
+            label = { Text(if (tool == "search") "Text to find" else "Pages, e.g. 1-3,5 (of $pageCount)") })
+    }, confirmButton = { TextButton(enabled = input.isNotBlank(), onClick = { if (tool == "search") onSearch(input) else onExtract(input); onDismiss() }) { Text("Go") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } })
 }

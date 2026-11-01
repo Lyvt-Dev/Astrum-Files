@@ -173,10 +173,36 @@ fun SettingsScreen(nav: NavHostController, vm: SettingsViewModel = hiltViewModel
             }
             item {
                 LyvtCard {
-                    SectionHeader("Privacy")
-                    Text("Lyvt Files contains no ads, no trackers and no analytics. It never uploads anything unless you explicitly start a transfer. " +
+                    SectionHeader("Network & transfers")
+                    Text("Saved servers keep passwords encrypted with the Android Keystore. SSH host keys are pinned after you verify them; TLS certificates are always validated. Transfer sessions expire after 15 minutes and every incoming file needs your approval.",
+                        style = MaterialTheme.typography.bodySmall)
+                    Row { TextButton(onClick = { nav.navigate(Routes.NETWORK) }) { Text("Servers") }; TextButton(onClick = { nav.navigate(Routes.TRANSFER) }) { Text("Astrum Transfer") } }
+                }
+            }
+            item {
+                LyvtCard {
+                    SectionHeader("Developer tools")
+                    Text("Long-press ⋮ on any file → “Inspect (developer)” for hashes, encoding, MIME, permissions and APK metadata, or “Open as text” for the syntax-highlighted editor with JSON/XML formatting and Markdown preview.",
+                        style = MaterialTheme.typography.bodySmall)
+                }
+            }
+            item {
+                LyvtCard {
+                    SectionHeader("Automation")
+                    TextButton(onClick = { nav.navigate(Routes.ORGANIZER) }) { Text("Smart Organizer rules") }
+                    TextButton(onClick = { nav.navigate(Routes.TIMELINE) }) { Text("Storage timeline") }
+                }
+            }
+            item {
+                LyvtCard {
+                    SectionHeader(stringResource(R.string.about))
+                    Text("Astrum Files contains no ads, no trackers and no analytics. It never uploads anything unless you explicitly start a transfer. " +
                         "All scanning, hashing and image analysis run on this device.", style = MaterialTheme.typography.bodySmall)
                     Spacer(Modifier.size(6.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        androidx.compose.foundation.Image(androidx.compose.ui.res.painterResource(R.drawable.astrum_logo), null, Modifier.size(40.dp).clip(MaterialTheme.shapes.small))
+                        Spacer(Modifier.width(10.dp)); Text("Astrum Files", style = MaterialTheme.typography.titleMedium)
+                    }
                     Text("Version ${com.lyvt.files.BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }

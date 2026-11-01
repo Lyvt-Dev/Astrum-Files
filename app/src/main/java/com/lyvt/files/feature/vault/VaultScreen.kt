@@ -266,6 +266,10 @@ private fun UnlockedView(nav: NavHostController, vm: VaultViewModel, s: VaultSta
                                     })
                                     DropdownMenuItem(text = { Text("Change PIN") }, onClick = { dialog = "pin"; menu = false })
                                     DropdownMenuItem(text = { Text("Encrypted backup") }, onClick = { vm.backup(); menu = false })
+                                    if (!vm.repo.isDecoyActive()) {
+                                        DropdownMenuItem(text = { Text(if (vm.repo.decoyExists()) "Replace decoy vault" else "Set up decoy vault") }, onClick = { dialog = "decoy"; menu = false })
+                                        if (vm.repo.decoyExists()) DropdownMenuItem(text = { Text("Remove decoy vault") }, onClick = { vm.removeDecoy(); menu = false })
+                                    }
                                 }
                             }
                         }
@@ -294,6 +298,8 @@ private fun UnlockedView(nav: NavHostController, vm: VaultViewModel, s: VaultSta
             modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp))
     }
     when (dialog) {
+        "decoy" -> TextInputDialog("Decoy vault PIN", numeric = true, password = true, label = "Different PIN (6+ digits)",
+            validate = { if (it.length < 6 || !it.all(Char::isDigit)) "At least 6 digits" else null }, onConfirm = vm::setUpDecoy, onDismiss = { dialog = null })
         "folder" -> TextInputDialog("New vault folder", label = "Name", onConfirm = vm::createFolder, onDismiss = { dialog = null })
         "pin" -> TextInputDialog("New PIN", numeric = true, password = true, validate = { if (it.length < 6 || !it.all(Char::isDigit)) "At least 6 digits" else null },
             onConfirm = vm::changePin, onDismiss = { dialog = null })

@@ -128,7 +128,7 @@ fun ExplorerPane(nav: NavHostController, vm: ExplorerViewModel, handleBack: Bool
         topBar = {
             Column(Modifier.statusBarsPadding()) {
                 if (ui.selection.isNotEmpty()) SelectionBar(ui.selection.size, vm, onMore = { dialog = ExplorerDialog.SelectionMenu })
-                else if (ui.searchText != null) SearchBar(ui.searchText!!, ui.searching, ui.searchResults.size, vm::search, vm::closeSearch)
+                else if (ui.searchText != null) SearchBar(ui.searchText!!, ui.searching, ui.searchResults.size, vm, vm::search, vm::closeSearch)
                 else BrowseBar(ui, settings.gridView, settings.showHidden, vm, onSort = { dialog = ExplorerDialog.Sort }, nav = nav)
                 if (ui.tabs.size > 1) TabsRow(ui, vm)
                 if (ui.searchText == null) Breadcrumbs(ui.path, vm.rootPath, vm::open)
@@ -214,6 +214,8 @@ private fun ItemMenu(item: FileItem, fav: Boolean, vm: ExplorerViewModel, nav: N
     DropdownMenuItem(text = { Text(if (fav) "Remove favorite" else stringResource(R.string.favorite)) }, onClick = act { vm.toggleFavorite(item) })
     if (item.isDirectory) DropdownMenuItem(text = { Text("Pin to home") }, onClick = act { onDialog(ExplorerDialog.Pin(item)) })
     DropdownMenuItem(text = { Text(stringResource(R.string.properties)) }, onClick = act { onDialog(ExplorerDialog.Properties(item)) })
+    if (!item.isDirectory) DropdownMenuItem(text = { Text("Inspect (developer)") }, onClick = act { nav.navigate(com.lyvt.files.ui.Routes.inspect(item.path)) })
+    if (!item.isDirectory) DropdownMenuItem(text = { Text("Open as text") }, onClick = act { nav.navigate(com.lyvt.files.ui.Routes.text(item.path)) })
     HorizontalDivider()
     DropdownMenuItem(text = { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) }, onClick = act { onDialog(ExplorerDialog.Delete(listOf(item.path))) })
 }
@@ -260,8 +262,9 @@ private fun SelectionBar(count: Int, vm: ExplorerViewModel, onMore: () -> Unit) 
 }
 
 @Composable
-private fun SearchBar(text: String, searching: Boolean, count: Int, onSearch: (String) -> Unit, onClose: () -> Unit) {
+private fun SearchBar(text: String, searching: Boolean, count: Int, vm: ExplorerViewModel, onSearch: (String) -> Unit, onClose: () -> Unit) {
     var value by remember { mutableStateOf(text) }
+    val history by vm.searchHistory.collectAsStateWithLifecycle()
     Column(Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
         OutlinedTextField(
             value = value, onValueChange = { value = it; onSearch(it) }, singleLine = true,
@@ -273,6 +276,11 @@ private fun SearchBar(text: String, searching: Boolean, count: Int, onSearch: (S
         Text(if (searching) "Searching… $count found" else if (value.isNotBlank()) "$count result(s)" else "Searches this folder and all subfolders",
             style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 8.dp, top = 4.dp))
         if (searching) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 4.dp))
+        if (value.isBlank() && history.isNotEmpty()) Row(Modifier.horizontalScroll(rememberScrollState()).padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            history.forEach { h -> com.lyvt.files.ui.Pill((if (h.saved) "★ " else "") + h.query, h.saved) { value = h.query; onSearch(h.query) } }
+            TextButton(onClick = vm::clearSearchHistory) { Text("Clear history") }
+        }
+        if (value.isNotBlank() && history.none { it.query == value.trim() && it.saved }) TextButton(onClick = { vm.saveSearch(value.trim()) }) { Text("★ Save this search") }
     }
 }
 

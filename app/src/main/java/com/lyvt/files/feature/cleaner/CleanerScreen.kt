@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Apps
+import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.BlurOn
 import androidx.compose.material.icons.filled.ContentCopy
@@ -83,6 +84,7 @@ private val tools = listOf(
     Tool(CleanerMode.EMPTY, R.string.cleaner_empty, "Folders with nothing inside", Icons.Filled.FolderOff, CategoryColors.other),
     Tool(CleanerMode.DOWNLOADS, R.string.cleaner_downloads, "Old downloads, APKs and partial files", Icons.Filled.Download, CategoryColors.document),
     Tool(CleanerMode.SCREENSHOTS, R.string.cleaner_screenshots, "Screenshots grouped by day", Icons.Filled.Screenshot, CategoryColors.apk),
+    Tool(CleanerMode.ARCHIVES, R.string.archives, "Archives you already extracted", Icons.Filled.Inventory2, CategoryColors.archive),
     Tool(CleanerMode.APPS, R.string.cleaner_apps, "Apps not opened for 30+ days", Icons.Filled.Apps, Accents[3]),
 )
 

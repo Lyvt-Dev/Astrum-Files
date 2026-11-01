@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
@@ -126,6 +128,8 @@ fun ExplorerDialogs(
                     TextButton(onClick = { onDialog(ExplorerDialog.BatchRenameDialog(sel)) }) { Text(stringResource(R.string.batch_rename)) }
                     TextButton(onClick = { onDialog(ExplorerDialog.Compress(sel, File(sel[0]).nameWithoutExtension)) }) { Text(stringResource(R.string.compress)) }
                     if (sel.size == 2) TextButton(onClick = { onDialog(ExplorerDialog.Compare(sel[0], sel[1])) }) { Text("Compare") }
+                    if (sel.size >= 2 && sel.all { it.endsWith(".pdf", true) }) TextButton(onClick = { vm.mergePdfs(sel); onDismiss() }) { Text("Merge ${sel.size} PDFs") }
+                    TextButton(onClick = { vm.newCollection("Selection ${java.text.SimpleDateFormat("d MMM HH:mm").format(java.util.Date())}", sel); onDismiss() }) { Text("Save as collection") }
                     if (sel.size == 1) TextButton(onClick = { ui.visibleItems.firstOrNull { it.path == sel[0] }?.let { onDialog(ExplorerDialog.Properties(it)) } }) { Text(stringResource(R.string.properties)) }
                     TextButton(onClick = { onDialog(ExplorerDialog.Delete(sel)) }) { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) }
                 }
@@ -173,6 +177,7 @@ private fun PropertiesDialog(item: FileItem, vm: ExplorerViewModel, onDismiss: (
                 else Prop("Size", "${Formatters.size(item.size)} (${item.size} bytes)")
                 Prop("Modified", Formatters.date(item.lastModified))
                 Prop("Readable / writable", "${File(item.path).canRead()} / ${File(item.path).canWrite()}")
+                LibrarySection(item, vm)
                 meta.forEach { (k, v) -> Prop(k, v) }
                 if (!item.isDirectory) {
                     Spacer(Modifier.height(8.dp))
@@ -310,4 +315,32 @@ private fun CompareDialog(a: String, b: String, onDismiss: () -> Unit) {
     AlertDialog(onDismissRequest = onDismiss, title = { Text("Compare") }, text = {
         Text(result ?: "Comparing…", style = MaterialTheme.typography.bodySmall, modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()))
     }, confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.ok)) } })
+}
+
+@Composable
+private fun LibrarySection(item: FileItem, vm: ExplorerViewModel) {
+    val note by vm.library.note(item.path).collectAsStateWithLifecycle(null)
+    val tags by vm.library.tagsFor(item.path).collectAsStateWithLifecycle(emptyList())
+    val collections by vm.collections.collectAsStateWithLifecycle()
+    var noteText by remember(note) { mutableStateOf(note?.note ?: "") }
+    var tagText by remember { mutableStateOf("") }
+    var newCol by remember { mutableStateOf(false) }
+    Spacer(Modifier.height(8.dp))
+    Text("Note", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    OutlinedTextField(noteText, { noteText = it }, placeholder = { Text("Add a personal note") }, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth())
+    if (noteText != (note?.note ?: "")) TextButton(onClick = { vm.setNote(item.path, noteText) }) { Text("Save note") }
+    Text("Tags", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
+    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        tags.forEach { t -> Pill("#$t ✕", true) { vm.removeTag(item.path, t) } }
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        OutlinedTextField(tagText, { tagText = it.replace(" ", "-") }, placeholder = { Text("new tag") }, singleLine = true, shape = RoundedCornerShape(12.dp), modifier = Modifier.weight(1f))
+        TextButton(enabled = tagText.isNotBlank(), onClick = { vm.addTag(item.path, tagText); tagText = "" }) { Text("Add") }
+    }
+    Text("Collections", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
+    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        collections.forEach { c -> Pill("+ ${c.name}", false) { vm.addToCollection(c.id, listOf(item.path)) } }
+        Pill("New…", false) { newCol = true }
+    }
+    if (newCol) TextInputDialog("New collection", label = "Name", confirm = "Create", onConfirm = { vm.newCollection(it, listOf(item.path)) }, onDismiss = { newCol = false })
 }

@@ -9,3 +9,29 @@
 -dontwarn com.github.luben.zstd.**
 -dontwarn org.brotli.dec.**
 -dontwarn org.objectweb.asm.**
+# Network stacks (sshj, smbj, BouncyCastle, commons-net, okhttp) and PdfBox use reflection / optional deps.
+-keep class net.schmizz.** { *; }
+-keep class com.hierynomus.** { *; }
+-keep class org.bouncycastle.** { *; }
+-keep class com.tom_roush.** { *; }
+-keep class org.apache.commons.net.** { *; }
+-dontwarn net.schmizz.**
+-dontwarn com.hierynomus.**
+-dontwarn org.bouncycastle.**
+-dontwarn org.slf4j.**
+-dontwarn com.tom_roush.**
+-dontwarn com.jcraft.**
+-dontwarn org.ietf.jgss.**
+-dontwarn javax.el.**
+-dontwarn net.engio.**
+-dontwarn com.sun.jna.**
+-dontwarn java.awt.**
+-dontwarn javax.naming.**
+-dontwarn okhttp3.internal.platform.**
+-dontwarn org.conscrypt.**
+-dontwarn org.openjsse.**
+-dontwarn com.google.errorprone.**
+# Please add these rules to your existing keep rules in order to suppress warnings.
+# This is generated automatically by the Android Gradle plugin.
+-dontwarn sun.security.x509.X509Key
+-keep class net.i2p.crypto.eddsa.** { *; }

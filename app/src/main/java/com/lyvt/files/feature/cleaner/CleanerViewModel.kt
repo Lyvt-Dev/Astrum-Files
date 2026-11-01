@@ -33,7 +33,7 @@ import java.text.DateFormat
 import java.util.Date
 import javax.inject.Inject
 
-enum class CleanerMode { DUPLICATES, SIMILAR, BLURRY, LARGE, OLD, EMPTY, DOWNLOADS, SCREENSHOTS, APPS }
+enum class CleanerMode { DUPLICATES, SIMILAR, BLURRY, LARGE, OLD, EMPTY, DOWNLOADS, SCREENSHOTS, ARCHIVES, APPS }
 
 data class CleanGroup(val title: String, val items: List<FileItem>, val note: String? = null)
 data class AppCandidate(val packageName: String, val label: String, val lastUsed: Long?, val installed: Long)
@@ -155,6 +155,18 @@ class CleanerViewModel @Inject constructor(
                             .filter { FileCategory.of(it.extension) == FileCategory.IMAGE }.sortedByDescending { it.lastModified() }
                         val fmt = DateFormat.getDateInstance(DateFormat.LONG)
                         shots.groupBy { fmt.format(Date(it.lastModified())) }.map { (d, l) -> CleanGroup("$d · ${l.size}", l.map { FileItem.from(it) }) }
+                    }
+                    CleanerMode.ARCHIVES -> {
+                        // An archive is "redundant" when a folder with the same base name sits next to it (already extracted)
+                        // and that folder holds at least as many bytes as the archive.
+                        val archives = files.filter { FileCategory.of(it.extension) == FileCategory.ARCHIVE }
+                        val extracted = archives.filter { a ->
+                            val base = a.name.removeSuffix(".tar.gz").removeSuffix(".tar.bz2").substringBeforeLast('.')
+                            val dir = File(a.parentFile, base)
+                            dir.isDirectory && dir.walkTopDown().filter { it.isFile }.sumOf { it.length() } >= a.length() / 2
+                        }
+                        if (extracted.isEmpty()) emptyList() else listOf(CleanGroup("${extracted.size} archives already extracted next to them", extracted.map { FileItem.from(it) },
+                            "A folder with the same name exists beside each archive. Check that its contents are complete before deleting."))
                     }
                     CleanerMode.APPS -> emptyList()
                 }

@@ -17,7 +17,10 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltAndroidApp
-class LyvtApp : Application() {
+class LyvtApp : Application(), androidx.work.Configuration.Provider {
+    @Inject lateinit var workerFactory: androidx.hilt.work.HiltWorkerFactory
+    override val workManagerConfiguration get() = androidx.work.Configuration.Builder().setWorkerFactory(workerFactory).build()
+
     @Inject lateinit var vault: VaultRepository
     @Inject lateinit var settings: SettingsRepository
     @Inject lateinit var trash: TrashManager
@@ -38,6 +41,7 @@ class LyvtApp : Application() {
             }
             override fun onStart(owner: LifecycleOwner) { lockJob?.cancel() }
         })
+        com.lyvt.files.core.work.Schedules.ensure(this)
         appScope.launch(Dispatchers.IO) {
             val s = settings.current()
             runCatching { trash.enforcePolicy(s.trashRetentionDays, s.trashLimitMb) }

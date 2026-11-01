@@ -1,8 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.Lyvt" parent="android:Theme.Material.Light.NoActionBar">
+    <style name="Theme.Astrum" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">#FF101018</item>
+        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher_foreground</item>
+        <item name="postSplashScreenTheme">@style/Theme.Astrum.Main</item>
+    </style>
+    <style name="Theme.Astrum.Main" parent="android:Theme.Material.NoActionBar">
         <item name="android:windowBackground">@color/splash_bg</item>
     </style>
-    <color name="splash_bg">#FFF7F9FC</color>
-    <color name="ic_bg">#FF2F6BFF</color>
+    <color name="splash_bg">#FF101018</color>
+    <color name="ic_bg">#FF000000</color>
+    <style name="QuickChip">
+        <item name="android:layout_width">0dp</item><item name="android:layout_weight">1</item>
+        <item name="android:layout_height">match_parent</item><item name="android:layout_margin">4dp</item>
+        <item name="android:gravity">center</item><item name="android:background">@drawable/widget_chip</item>
+        <item name="android:textColor">@color/widget_text</item><item name="android:textSize">12sp</item><item name="android:maxLines">1</item>
+    </style>
 </resources>

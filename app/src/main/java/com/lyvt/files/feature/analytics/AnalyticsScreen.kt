@@ -211,7 +211,7 @@ private fun Treemap(folders: List<FolderStat>, onClick: (FolderStat) -> Unit) {
 }
 
 @Composable
-private fun TrendChart(points: List<Pair<Long, Long>>) {
+fun TrendChart(points: List<Pair<Long, Long>>) {
     val color = MaterialTheme.colorScheme.primary
     val grid = MaterialTheme.colorScheme.outlineVariant
     Canvas(Modifier.fillMaxWidth().height(140.dp).padding(vertical = 8.dp)) {

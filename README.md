@@ -1,10 +1,10 @@
 # Astrum Files
 
-A privacy-first, offline Android file manager built with Kotlin and Jetpack Compose. It covers the usual
+Astrum Files is a privacy-first Android file manager built with Kotlin and Jetpack Compose. It covers the usual
 file-management features plus a storage cleaner, storage analytics, an encrypted vault, an archive manager, a trash,
 and built-in media and document viewers.
 
-> Status: **early milestone build (0.1.0)**. The core app compiles, unit tests pass, and a debug APK is produced.
+> Status: **0.2.0**. The core app compiles, unit tests pass, and a debug APK is produced.
 > It has **not yet been run on a device or emulator** in CI (the build machine has no hardware virtualisation).
 > See [`FEATURES.md`](FEATURES.md) for an honest per-feature status.
 
@@ -25,6 +25,18 @@ and built-in media and document viewers.
   encrypted backup/restore.
 - **Archives**: create ZIP (optionally AES-256), extract ZIP/7z/TAR/TAR.GZ/TAR.BZ2/TAR.XZ/GZ/BZ2, browse and
   extract selected entries, integrity test, ZIP-Slip and decompression-bomb protection.
+- **Smart Organizer**: offline rules (extension, regex, size, age, folder) with `{ext} {category} {yyyy} {MM} {lang}`
+  destinations, dry-run preview, approval, undo, and optional daily runs through WorkManager.
+- **Network**: SFTP (pinned host keys), SMB/NAS, WebDAV (HTTPS, validated certificates), and FTP (labelled insecure).
+  Browse, upload, download, rename, delete, progress and cancel. Passwords are encrypted with the Android Keystore.
+- **Astrum Transfer**: phone↔PC and phone↔phone via QR code. Uses a token-protected local HTTP session that expires,
+  approves every incoming file on the phone, supports resumable downloads (HTTP Range), and keeps a history.
+- **Collections, tags and notes** stored in Room, which follow files when they are moved inside the app.
+- **Developer tools**: file inspector (MD5/SHA-1/SHA-256/SHA-512, encoding, line endings, MIME, POSIX permissions,
+  APK metadata), JSON/XML formatter, Markdown preview, and highlighting for about 20 languages.
+- **PDF tools**: merge, split, extract pages, rotate copy, metadata, and text search (PdfBox-Android).
+- **Storage timeline** built from real snapshots (WorkManager, every ~12 h). **Widgets**: storage and quick access.
+- **Vault 2.0**: optional independent decoy vault unlocked by a different PIN.
 - **Viewers**: image viewer (zoom, swipe, rotate, slideshow, EXIF, edited copies, wallpaper), Media3 audio/video
   player (background playback service, notification and lock-screen controls, speed, sleep timer, queue, PiP,
   gestures, resume position), PDF viewer (system renderer, zoom, rotate, bookmarks, print, share), and a text/code
@@ -77,9 +89,10 @@ MVVM with `StateFlow`, Hilt DI, Room, DataStore, coroutines with structured canc
 | `PACKAGE_USAGE_STATS` (optional) | Only for the "unused apps" tool. The user must grant it manually. |
 | `USE_BIOMETRIC` | Vault biometric unlock. |
 | `FOREGROUND_SERVICE_MEDIA_PLAYBACK`, `POST_NOTIFICATIONS`, `WAKE_LOCK` | Background audio playback. |
+| `INTERNET`, `ACCESS_NETWORK_STATE`, `ACCESS_WIFI_STATE` | Remote file systems and Astrum Transfer (user-initiated only). |
 | `SET_WALLPAPER` | "Set as wallpaper" in the image viewer. |
 
-There is no `INTERNET` permission, so the current build cannot make network connections at all.
+`INTERNET` is used **only** for features you start yourself (remote servers, Astrum Transfer). There is no analytics, no ads and no background network traffic.
 
 **Play Store note:** Google Play allows "All files access" only for apps whose core purpose needs it, such as file
 managers, and requires a declaration form. If that is not accepted, the fallback is a Storage Access Framework and

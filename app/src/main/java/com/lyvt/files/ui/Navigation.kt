@@ -7,6 +7,10 @@ import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.fadeIn
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -88,6 +92,9 @@ import com.lyvt.files.feature.viewer.TextViewerScreen
 object Routes {
     const val HOME = "home"; const val FILES = "files"; const val CLEANER = "cleaner"; const val ANALYTICS = "analytics"; const val VAULT = "vault"
     const val TRASH = "trash"; const val SETTINGS = "settings"; const val HISTORY = "history"
+    const val TOOLS = "tools"; const val ORGANIZER = "organizer"; const val LIBRARY = "library"; const val NETWORK = "network"
+    const val TRANSFER = "transfer"; const val TIMELINE = "timeline"
+    fun inspect(path: String) = "inspect?path=${Uri.encode(path)}"
     fun files(path: String? = null, query: String? = null) = "files?path=${Uri.encode(path ?: "")}&q=${Uri.encode(query ?: "")}"
     fun image(path: String) = "image?path=${Uri.encode(path)}"
     fun text(path: String) = "text?path=${Uri.encode(path)}"
@@ -122,7 +129,7 @@ fun NavHostController.openFile(path: String): Boolean {
 }
 
 @Composable
-fun LyvtRoot(settings: AppSettings) {
+fun LyvtRoot(settings: AppSettings, pendingRoute: androidx.compose.runtime.MutableState<String?> = remember { mutableStateOf(null) }) {
     val ctx = LocalContext.current
     var hasAccess by remember { mutableStateOf(StoragePermission.granted(ctx)) }
     var limitedMode by rememberSaveable { mutableStateOf(false) }
@@ -143,6 +150,15 @@ fun LyvtRoot(settings: AppSettings) {
         popUpTo(nav.graph.findStartDestination().id) { saveState = true }
         launchSingleTop = true; restoreState = true
     }
+    androidx.compose.runtime.LaunchedEffect(pendingRoute.value) {
+        val r = pendingRoute.value ?: return@LaunchedEffect
+        pendingRoute.value = null
+        when (r) {
+            "files", "cleaner", "analytics", "vault", "home" -> go(r)
+            "downloads" -> nav.navigate(Routes.files(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS).absolutePath))
+            else -> nav.navigate(r)
+        }
+    }
     BoxWithConstraints(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         val wide = maxWidth >= 600.dp
         Row(Modifier.fillMaxSize()) {
@@ -158,7 +174,10 @@ fun LyvtRoot(settings: AppSettings) {
             Column(Modifier.weight(1f)) {
                 Box(Modifier.weight(1f)) {
                     NavHost(nav, startDestination = if (settings.startPage == "files") Routes.FILES else Routes.HOME,
-                        enterTransition = { fadeIn() }, exitTransition = { fadeOut() }) {
+                        enterTransition = { if (settings.reduceMotion) fadeIn(snap()) else fadeIn(tween(220)) + slideInHorizontally(tween(260)) { it / 12 } },
+                        exitTransition = { fadeOut(tween(if (settings.reduceMotion) 0 else 160)) },
+                        popEnterTransition = { fadeIn(tween(if (settings.reduceMotion) 0 else 220)) },
+                        popExitTransition = { if (settings.reduceMotion) fadeOut(snap()) else fadeOut(tween(160)) + slideOutHorizontally(tween(220)) { it / 12 } }) {
                         composable(Routes.HOME) { HomeScreen(nav) }
                         composable("${Routes.FILES}?path={path}&q={q}", arguments = listOf(
                             navArgument("path") { type = NavType.StringType; defaultValue = "" },
@@ -170,6 +189,13 @@ fun LyvtRoot(settings: AppSettings) {
                         composable(Routes.TRASH) { TrashScreen(nav) }
                         composable(Routes.SETTINGS) { SettingsScreen(nav) }
                         composable(Routes.HISTORY) { HistoryScreen(nav) }
+                        composable(Routes.TOOLS) { com.lyvt.files.feature.tools.ToolsScreen(nav) }
+                        composable(Routes.ORGANIZER) { com.lyvt.files.feature.organizer.OrganizerScreen(nav) }
+                        composable(Routes.LIBRARY) { com.lyvt.files.feature.library.LibraryScreen(nav) }
+                        composable(Routes.NETWORK) { com.lyvt.files.feature.network.NetworkScreen(nav) }
+                        composable(Routes.TRANSFER) { com.lyvt.files.feature.transfer.TransferScreen(nav) }
+                        composable(Routes.TIMELINE) { com.lyvt.files.feature.analytics.TimelineScreen(nav) }
+                        composable("inspect?path={path}") { com.lyvt.files.feature.devtools.InspectorScreen(nav, Uri.decode(it.arguments?.getString("path").orEmpty())) }
                         composable("image?path={path}") { ImageViewerScreen(nav, Uri.decode(it.arguments?.getString("path").orEmpty())) }
                         composable("text?path={path}") { TextViewerScreen(nav, Uri.decode(it.arguments?.getString("path").orEmpty())) }
                         composable("media?path={path}") { MediaPlayerScreen(nav, Uri.decode(it.arguments?.getString("path").orEmpty())) }
@@ -177,6 +203,7 @@ fun LyvtRoot(settings: AppSettings) {
                         composable("archive?path={path}") { ArchiveScreen(nav, Uri.decode(it.arguments?.getString("path").orEmpty())) }
                     }
                 }
+                if (showBar) MiniPlayer { nav.navigate(Routes.media(it)) }
                 if (!wide && showBar) NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainerLow, tonalElevation = 0.dp) {
                     destinations.forEach { d ->
                         val sel = currentRoute == d.route

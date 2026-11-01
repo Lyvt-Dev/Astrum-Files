@@ -21,4 +21,10 @@ object AppModule {
     @Provides fun ops(db: AppDatabase) = db.operations()
     @Provides fun snapshots(db: AppDatabase) = db.snapshots()
     @Provides fun tags(db: AppDatabase) = db.tags()
+    @Provides fun organizer(db: AppDatabase) = db.organizer()
+    @Provides fun notes(db: AppDatabase) = db.notes()
+    @Provides fun collections(db: AppDatabase) = db.collections()
+    @Provides fun searches(db: AppDatabase) = db.searches()
+    @Provides fun connections(db: AppDatabase) = db.connections()
+    @Provides fun transfers(db: AppDatabase) = db.transfers()
 }

@@ -64,26 +64,34 @@ sealed interface VaultState {
  */
 @Singleton
 class VaultRepository @Inject constructor(@ApplicationContext private val context: Context) {
-    private val root = File(context.filesDir, "vault").apply { mkdirs() }
-    private val blobs = File(root, "blobs").apply { mkdirs() }
+    /**
+     * Active space: "vault" (real) or "vault-decoy". Each space has its own master key, Keystore alias, salts and
+     * blobs, so the decoy shares no key material with the real vault and reveals nothing about it.
+     */
+    private var space = "vault"
+    private val root get() = File(context.filesDir, space).apply { mkdirs() }
+    private val blobs get() = File(root, "blobs").apply { mkdirs() }
     private val tmp = File(context.cacheDir, "vault-view")
-    private val meta = File(root, "meta.json") // non-secret parameters (salts, iteration count)
+    private val meta get() = File(root, "meta.json") // non-secret parameters (salts, iteration count)
+    private val deviceAlias get() = if (space == "vault") DEVICE_ALIAS else "${DEVICE_ALIAS}_decoy"
+    fun decoyExists() = File(context.filesDir, "vault-decoy/pin.wrap").exists()
+    fun isDecoyActive() = space == "vault-decoy"
     private val prefs = context.getSharedPreferences("vault_guard", Context.MODE_PRIVATE)
 
     private var masterKey: SecretKey? = null
     private val _state = MutableStateFlow<VaultState>(if (isSetUp()) VaultState.Locked else VaultState.NotSetUp)
     val state: StateFlow<VaultState> = _state.asStateFlow()
 
-    fun isSetUp() = File(root, "pin.wrap").exists()
-    fun biometricEnrolled() = File(root, "bio.wrap").exists()
+    fun isSetUp() = File(context.filesDir, "vault/pin.wrap").exists()
+    fun biometricEnrolled() = File(context.filesDir, "vault/bio.wrap").exists()
 
     // ---------- Keystore ----------
     private val keyStore by lazy { KeyStore.getInstance("AndroidKeyStore").apply { load(null) } }
 
     private fun deviceKey(): SecretKey {
-        (keyStore.getKey(DEVICE_ALIAS, null) as? SecretKey)?.let { return it }
+        (keyStore.getKey(deviceAlias, null) as? SecretKey)?.let { return it }
         val gen = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore")
-        gen.init(KeyGenParameterSpec.Builder(DEVICE_ALIAS, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
+        gen.init(KeyGenParameterSpec.Builder(deviceAlias, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
             .setBlockModes(KeyProperties.BLOCK_MODE_GCM).setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
             .setKeySize(256).build())
         return gen.generateKey()
@@ -136,18 +144,45 @@ class VaultRepository @Inject constructor(@ApplicationContext private val contex
     suspend fun unlockWithPin(pin: CharArray): Result<Unit> = withContext(Dispatchers.Default) {
         if (lockoutRemainingMs() > 0) return@withContext Result.failure(IOException("Too many attempts. Try again in ${lockoutRemainingMs() / 1000 + 1}s"))
         runCatching {
-            val m = JSONObject(meta.readText())
-            val wrapped = ksOpen(deviceKey(), File(root, "pin.wrap").readBytes())
-            val raw = VaultCipher.open(VaultCipher.deriveKey(pin, unb64(m.getString("pinSalt")), m.getInt("iter")), wrapped)
-            masterKey = SecretKeySpec(raw, "AES")
+            space = "vault"
+            val ok = runCatching { unwrapPin(pin) }.getOrNull() ?: if (decoyExists()) { space = "vault-decoy"; unwrapPin(pin) } else throw IOException("bad pin")
+            masterKey = SecretKeySpec(ok, "AES")
             prefs.edit().putInt("fails", 0).apply()
             publish()
         }.onFailure {
+            space = "vault"
             val fails = prefs.getInt("fails", 0) + 1
             val wait = if (fails >= 5) (30_000L shl (fails - 5).coerceAtMost(6)) else 0L
             prefs.edit().putInt("fails", fails).putLong("lock_until", System.currentTimeMillis() + wait).apply()
         }.recoverCatching { throw IOException("Incorrect PIN") }
     }
+
+    private fun unwrapPin(pin: CharArray): ByteArray {
+        val m = JSONObject(meta.readText())
+        val wrapped = ksOpen(deviceKey(), File(root, "pin.wrap").readBytes())
+        return VaultCipher.open(VaultCipher.deriveKey(pin, unb64(m.getString("pinSalt")), m.getInt("iter")), wrapped)
+    }
+
+    /**
+     * Creates (or replaces) the decoy vault with its own PIN. Only possible from the unlocked real vault.
+     * The decoy PIN must differ from the real one; it is checked by trying to unwrap the real key with it.
+     */
+    suspend fun setUpDecoy(pin: CharArray) = withContext(Dispatchers.Default) {
+        check(isUnlocked() && space == "vault") { "Unlock the real vault first" }
+        require(runCatching { unwrapPin(pin) }.isFailure) { "Decoy PIN must differ from your real PIN" }
+        val realKey = masterKey
+        File(context.filesDir, "vault-decoy").deleteRecursively()
+        space = "vault-decoy"
+        try {
+            val mk = VaultCipher.newKey(); val salt = VaultCipher.randomBytes(16); val recSalt = VaultCipher.randomBytes(16)
+            File(root, "pin.wrap").writeBytes(ksSeal(deviceKey(), VaultCipher.seal(VaultCipher.deriveKey(pin, salt), mk.encoded)))
+            File(root, "recovery.wrap").writeBytes(VaultCipher.seal(VaultCipher.deriveKey(normalizeCode(generateRecoveryCode()), recSalt), mk.encoded))
+            meta.writeText(JSONObject().put("v", 1).put("pinSalt", b64(salt)).put("recSalt", b64(recSalt)).put("iter", VaultCipher.PBKDF2_ITERATIONS).toString())
+            masterKey = mk; writeIndex(emptyList(), emptyList())
+        } finally { space = "vault"; masterKey = realKey }
+    }
+
+    fun removeDecoy() { File(context.filesDir, "vault-decoy").deleteRecursively(); runCatching { keyStore.deleteEntry("${DEVICE_ALIAS}_decoy") } }
 
     suspend fun recover(code: String, newPin: CharArray): Result<Unit> = withContext(Dispatchers.Default) {
         runCatching {
@@ -190,6 +225,7 @@ class VaultRepository @Inject constructor(@ApplicationContext private val contex
     }
 
     fun completeBiometricUnlock(cipher: Cipher): Result<Unit> = runCatching {
+        space = "vault"
         val blob = File(root, "bio.wrap").readBytes()
         masterKey = SecretKeySpec(cipher.doFinal(blob, 12, blob.size - 12), "AES")
         publish()
@@ -202,6 +238,7 @@ class VaultRepository @Inject constructor(@ApplicationContext private val contex
 
     fun lock() {
         masterKey = null
+        space = "vault"
         tmp.deleteRecursively()
         if (isSetUp()) _state.value = VaultState.Locked
     }
