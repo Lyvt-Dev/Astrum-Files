@@ -23,8 +23,8 @@ android {
         applicationId = "com.lyvt.files"
         minSdk = 29
         targetSdk = 36
-        versionCode = 7
-        versionName = "0.2.2"
+        versionCode = 8
+        versionName = "0.2.3"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

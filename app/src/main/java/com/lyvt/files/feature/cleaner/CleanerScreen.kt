@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -85,7 +87,7 @@ private val tools = listOf(
     Tool(CleanerMode.DOWNLOADS, R.string.cleaner_downloads, "Old downloads, APKs and partial files", Icons.Filled.Download, CategoryColors.document),
     Tool(CleanerMode.SCREENSHOTS, R.string.cleaner_screenshots, "Screenshots grouped by day", Icons.Filled.Screenshot, CategoryColors.apk),
     Tool(CleanerMode.ARCHIVES, R.string.archives, "Archives you already extracted", Icons.Filled.Inventory2, CategoryColors.archive),
-    Tool(CleanerMode.APPS, R.string.cleaner_apps, "Apps not opened for 30+ days", Icons.Filled.Apps, Accents[3]),
+    Tool(CleanerMode.APPS, R.string.cleaner_apps, "Apps you haven't opened for a while", Icons.Filled.Apps, Accents[3]),
 )
 
 @Composable
@@ -97,6 +99,11 @@ fun CleanerScreen(nav: NavHostController, vm: CleanerViewModel = hiltViewModel()
     val ctx = LocalContext.current
     LaunchedEffect(Unit) { vm.messages.collect { snackbar.showSnackbar(it) } }
     BackHandler(ui.mode != null) { vm.open(null) }
+    val owner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    androidx.compose.runtime.DisposableEffect(owner, ui.mode) {
+        val obs = androidx.lifecycle.LifecycleEventObserver { _, e -> if (e == androidx.lifecycle.Lifecycle.Event.ON_RESUME && ui.mode == CleanerMode.APPS) vm.refreshApps() }
+        owner.lifecycle.addObserver(obs); onDispose { owner.lifecycle.removeObserver(obs) }
+    }
 
     Scaffold(snackbarHost = { SnackbarHost(snackbar) }, containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
@@ -161,7 +168,20 @@ fun CleanerScreen(nav: NavHostController, vm: CleanerViewModel = hiltViewModel()
                         EmptyState(Icons.Filled.Apps, "Usage access needed", "Android only shares app-usage history if you grant “Usage access”. Without it, unused apps cannot be determined.") {
                             Button(onClick = { ctx.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)) }) { Text("Open usage access settings") }
                         }
-                    } else if (ui.apps.isEmpty()) item { EmptyState(Icons.Outlined.CheckCircle, "No unused apps", "All installed apps were used in the last 30 days.") }
+                    } else {
+                    item {
+                        Column(Modifier.padding(horizontal = 18.dp, vertical = 4.dp)) {
+                            Text("Not opened for", style = MaterialTheme.typography.labelLarge)
+                            Row(Modifier.horizontalScroll(rememberScrollState()).padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                listOf(7 to "1 week", 14 to "2 weeks", 30 to "1 month", 60 to "2 months", 90 to "3 months", 180 to "6 months", 365 to "1 year").forEach { (d, l) ->
+                                    com.lyvt.files.ui.Pill(l, ui.unusedDays == d) { vm.setUnusedDays(d) }
+                                }
+                            }
+                            Text("${ui.apps.size} app(s) · based on Android's usage history. Uninstalling always asks for your confirmation.",
+                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                    if (ui.apps.isEmpty()) item { EmptyState(Icons.Outlined.CheckCircle, "No unused apps", "Every app was opened within the chosen time span.") }
                     else items(ui.apps, key = { it.packageName }) { a ->
                         Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
@@ -170,8 +190,15 @@ fun CleanerScreen(nav: NavHostController, vm: CleanerViewModel = hiltViewModel()
                                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                             TextButton(onClick = { ctx.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${a.packageName}"))) }) { Text("Details") }
-                            TextButton(onClick = { ctx.startActivity(Intent(Intent.ACTION_DELETE, Uri.parse("package:${a.packageName}"))) }) { Text("Uninstall") }
+                            TextButton(onClick = {
+                                // System uninstall dialog; falls back to the app's settings page (which has an Uninstall button).
+                                val del = Intent(Intent.ACTION_DELETE, Uri.parse("package:${a.packageName}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                runCatching { ctx.startActivity(del) }.onFailure {
+                                    ctx.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${a.packageName}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                                }
+                            }) { Text("Uninstall", color = MaterialTheme.colorScheme.error) }
                         }
+                    }
                     }
                 } else if (ui.groups.isEmpty()) item { EmptyState(Icons.Outlined.CheckCircle, "Nothing found", ui.lastScanSummary ?: "Your storage looks tidy.") }
                 else {

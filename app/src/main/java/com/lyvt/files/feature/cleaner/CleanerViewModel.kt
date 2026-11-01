@@ -51,6 +51,7 @@ data class CleanerUi(
     val appsPermissionMissing: Boolean = false,
     val largeThresholdMb: Int = 100,
     val oldMonths: Int = 12,
+    val unusedDays: Int = 30,
     val similarity: Int = 8,
     val blurThreshold: Int = 60,
     val lastScanSummary: String? = null,
@@ -76,6 +77,13 @@ class CleanerViewModel @Inject constructor(
     fun cancel() { job?.cancel(); _ui.update { it.copy(running = false, progress = "Cancelled") } }
     fun setLarge(mb: Int) { _ui.update { it.copy(largeThresholdMb = mb) } }
     fun setOld(m: Int) { _ui.update { it.copy(oldMonths = m) } }
+    fun setUnusedDays(d: Int) { _ui.update { it.copy(unusedDays = d) }; run() }
+    /** Drops an app from the list once it is really gone (called when returning from the uninstall dialog). */
+    fun refreshApps() {
+        if (_ui.value.appsPermissionMissing) { run(); return } // user may have just granted Usage access
+        val pm = context.packageManager
+        _ui.update { u -> u.copy(apps = u.apps.filter { a -> runCatching { pm.getPackageInfo(a.packageName, 0) }.isSuccess }) }
+    }
     fun setSimilarity(v: Int) { _ui.update { it.copy(similarity = v) } }
     fun setBlur(v: Int) { _ui.update { it.copy(blurThreshold = v) } }
 
@@ -195,7 +203,8 @@ class CleanerViewModel @Inject constructor(
                 val last = stats[ai.packageName]?.lastTimeUsed?.takeIf { it > 0 }
                 AppCandidate(ai.packageName, pm.getApplicationLabel(ai).toString(), last, runCatching { pm.getPackageInfo(ai.packageName, 0).firstInstallTime }.getOrDefault(0))
             }
-            .filter { (it.lastUsed ?: 0) < now - 30L * 86_400_000 }
+            // Unused = not opened within the chosen span. Apps installed inside the span are excluded (they had no chance to be used).
+            .filter { val cutoff = now - _ui.value.unusedDays * 86_400_000L; (it.lastUsed ?: 0) < cutoff && it.installed < cutoff }
             .sortedBy { it.lastUsed ?: 0 }
         _ui.update { it.copy(running = false, apps = apps, appsPermissionMissing = false) }
     }
