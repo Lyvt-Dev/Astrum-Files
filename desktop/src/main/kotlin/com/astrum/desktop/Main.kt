@@ -75,7 +75,7 @@ fun main() {
     val skipIntro = System.getProperty("astrum.nointro") != null
     application {
         val state = rememberWindowState(size = DpSize(1360.dp, 860.dp))
-        Window(onCloseRequest = { Transfer.stop(); Vault.lock(); AppState.save(); exitApplication() }, state = state, title = "Astrum Files", icon = painterResource("astrum.png")) {
+        Window(onCloseRequest = { Transfer.stop(); Transfer.nearby.stop(); Vault.lock(); AppState.save(); exitApplication() }, state = state, title = "Astrum Files", icon = painterResource("astrum.png")) {
             window.minimumSize = java.awt.Dimension(980, 640)
             // Vault auto-lock after 5 minutes without activity or when the window is minimised for 1 minute.
             LaunchedEffect(Unit) { while (true) { delay(15_000)

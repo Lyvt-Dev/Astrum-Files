@@ -1,6 +1,9 @@
 package com.lyvt.files.feature.transfer
 
+import android.content.ClipData
+import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -57,6 +60,8 @@ import com.google.zxing.qrcode.QRCodeWriter
 import com.lyvt.files.core.common.Formatters
 import com.lyvt.files.core.database.TransferDao
 import com.lyvt.files.core.database.TransferEntity
+import com.lyvt.files.core.network.NearbyDiscovery
+import com.lyvt.files.core.network.NearbyPeer
 import com.lyvt.files.core.network.SharedItem
 import com.lyvt.files.core.network.TransferServer
 import com.lyvt.files.ui.EmptyState
@@ -78,6 +83,50 @@ class TransferViewModel @Inject constructor(@ApplicationContext private val ctx:
     val server = MutableStateFlow<TransferServer?>(null)
     val error = MutableStateFlow<String?>(null)
 
+    val deviceName: String = (android.provider.Settings.Global.getString(ctx.contentResolver, "device_name") ?: android.os.Build.MODEL ?: "Phone").take(40)
+    val nearby = NearbyDiscovery(deviceName, "phone")
+    val connecting = MutableStateFlow<String?>(null)
+    private val multicast = runCatching {
+        ctx.getSystemService(android.net.wifi.WifiManager::class.java).createMulticastLock("astrum-nearby").apply { setReferenceCounted(false); acquire() }
+    }.getOrNull()
+    init { nearby.start() }
+
+    fun connect(p: NearbyPeer) {
+        connecting.value = p.name; error.value = null
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            NearbyDiscovery.requestAccess(p, deviceName)
+                .onSuccess { url -> runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } }
+                .onFailure { error.value = it.message }
+            connecting.value = null
+        }
+    }
+
+    private fun sendIntent(): Intent? {
+        val uris = ArrayList(shared.value.map { it.uri }).takeIf { it.isNotEmpty() } ?: return null
+        return (if (uris.size == 1) Intent(Intent.ACTION_SEND).putExtra(Intent.EXTRA_STREAM, uris[0]).setType(ctx.contentResolver.getType(uris[0]) ?: "*/*")
+        else Intent(Intent.ACTION_SEND_MULTIPLE).putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris).setType("*/*"))
+            .apply { clipData = ClipData.newRawUri(null, uris[0]); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK) }
+    }
+
+    /** Finds the system's Quick Share (Samsung / Google) or Bluetooth share target, so we can open it directly. */
+    private fun findTarget(bluetooth: Boolean): ComponentName? = runCatching {
+        ctx.packageManager.queryIntentActivities(Intent(Intent.ACTION_SEND).setType("*/*"), 0).firstOrNull { ri ->
+            val pkg = ri.activityInfo.packageName; val label = ri.loadLabel(ctx.packageManager).toString()
+            if (bluetooth) pkg == "com.android.bluetooth" || pkg == "com.google.android.bluetooth" || label.equals("Bluetooth", true)
+            else pkg == "com.samsung.android.app.sharelive" || Regex("quick ?share|nearby", RegexOption.IGNORE_CASE).containsMatchIn(label)
+        }?.activityInfo?.let { ComponentName(it.packageName, it.name) }
+    }.getOrNull()
+
+    fun shareVia(bluetooth: Boolean) {
+        val i = sendIntent() ?: run { error.value = "Add files first."; return }
+        val target = findTarget(bluetooth)
+        runCatching {
+            if (target != null) ctx.startActivity(i.setComponent(target))
+            else { error.value = if (bluetooth) "No Bluetooth share found — pick it from the list." else "Quick Share not found on this phone — pick a share option from the list."
+                ctx.startActivity(Intent.createChooser(i, null).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+        }.onFailure { error.value = "Could not open sharing: ${it.message}" }
+    }
+
     fun add(uris: List<Uri>) { shared.value = (shared.value + uris.map { TransferServer.itemFor(ctx, it) }).distinctBy { it.uri } }
     fun clear() { shared.value = emptyList() }
 
@@ -88,10 +137,10 @@ class TransferViewModel @Inject constructor(@ApplicationContext private val ctx:
             TransferServer(ctx, shared.value, minutes * 60_000L) { e ->
                 viewModelScope.launch { dao.insert(TransferEntity(direction = if (e.incoming) "received" else "sent", name = e.name, size = e.size, peer = e.peer, success = e.ok)) }
             }.also { it.start() }
-        }.onSuccess { server.value = it; error.value = null }.onFailure { error.value = "Could not start: ${it.message}" }
+        }.onSuccess { server.value = it; error.value = null; nearby.advertisePort = it.port }.onFailure { error.value = "Could not start: ${it.message}" }
     }
-    fun stop() { server.value?.stop(); server.value = null }
-    override fun onCleared() { stop() }
+    fun stop() { nearby.advertisePort = null; server.value?.stop(); server.value = null }
+    override fun onCleared() { stop(); nearby.stop(); runCatching { multicast?.release() } }
 }
 
 private fun qr(text: String, size: Int = 640): Bitmap {
@@ -105,6 +154,8 @@ fun TransferScreen(nav: NavHostController, vm: TransferViewModel = hiltViewModel
     val server by vm.server.collectAsStateWithLifecycle()
     val history by vm.history.collectAsStateWithLifecycle()
     val error by vm.error.collectAsStateWithLifecycle()
+    val peers by vm.nearby.peers.collectAsStateWithLifecycle()
+    val connecting by vm.connecting.collectAsStateWithLifecycle()
     val pick = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { vm.add(it) }
     val s = server
     val incoming by (s?.incoming ?: MutableStateFlow(null)).collectAsStateWithLifecycle()
@@ -130,6 +181,29 @@ fun TransferScreen(nav: NavHostController, vm: TransferViewModel = hiltViewModel
                 }
                 Text("Receiving needs no selection — the other device can send files to this phone, and you approve each one.",
                     style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
+            }
+        }
+        item {
+            LyvtCard {
+                SectionHeader("Quick Share")
+                Text("Send the files above with your phone's Quick Share (Samsung / Google) or via Bluetooth — works with phones and PCs that don't have Astrum.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
+                    Button(enabled = shared.isNotEmpty(), onClick = { vm.shareVia(false) }) { Text("Quick Share") }
+                    OutlinedButton(enabled = shared.isNotEmpty(), onClick = { vm.shareVia(true) }) { Text("Bluetooth") }
+                }
+                Text("Nearby Astrum devices", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 14.dp))
+                Text("PCs and phones with Astrum Files on this Wi-Fi appear here while they have a session running. The other device must tap Allow.",
+                    style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (peers.isEmpty()) Text("Searching…", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 6.dp))
+                peers.forEach { p ->
+                    Row(Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(if (p.platform == "pc") "🖥" else "📱", modifier = Modifier.padding(end = 10.dp))
+                        Column(Modifier.weight(1f)) { Text(p.name, style = MaterialTheme.typography.bodyMedium)
+                            Text(p.host, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                        TextButton(enabled = connecting == null, onClick = { vm.connect(p) }) { Text(if (connecting == p.name) "Waiting…" else "Connect") }
+                    }
+                }
             }
         }
         item {
@@ -166,7 +240,11 @@ fun TransferScreen(nav: NavHostController, vm: TransferViewModel = hiltViewModel
         }
     }
     incoming?.let { r ->
-        AlertDialog(onDismissRequest = {}, title = { Text("Incoming file") }, text = {
+        if (r.size < 0) AlertDialog(onDismissRequest = {}, title = { Text("Nearby device wants to connect") }, text = {
+            Text("“${r.name}” (${r.from}) wants to connect.\n\nIf you allow it, it can download the files you share here and send you files (each still needs your OK).")
+        }, confirmButton = { TextButton(onClick = { r.answer.complete(true) }) { Text("Allow") } },
+            dismissButton = { TextButton(onClick = { r.answer.complete(false) }) { Text("Decline") } })
+        else AlertDialog(onDismissRequest = {}, title = { Text("Incoming file") }, text = {
             Text("${r.from} wants to send:\n\n${r.name}\n${Formatters.size(r.size)}\n\nIt will be saved to Download/Astrum Received.")
         }, confirmButton = { TextButton(onClick = { r.answer.complete(true) }) { Text("Accept") } },
             dismissButton = { TextButton(onClick = { r.answer.complete(false) }) { Text("Decline") } })

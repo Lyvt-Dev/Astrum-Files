@@ -100,6 +100,7 @@ class TransferServer(private val ctx: Context, private val shared: List<SharedIt
         val headers = HashMap<String, String>()
         while (true) { val l = readLine(input); if (l.isEmpty()) break; l.split(':', limit = 2).takeIf { it.size == 2 }?.let { headers[it[0].trim().lowercase()] = it[1].trim() } }
         val path = target.substringBefore('?'); val query = target.substringAfter('?', "")
+        if (method == "GET" && path == "/knock") return knock(query, out, peer)
         if (!path.startsWith("/$token/")) { failures[peer] = (failures[peer] ?: 0) + 1; respond(out, 404, "text/plain", "Not found".toByteArray()); return }
         val rest = path.removePrefix("/$token/")
         when {
@@ -109,6 +110,19 @@ class TransferServer(private val ctx: Context, private val shared: List<SharedIt
             else -> respond(out, 404, "text/plain", "Not found".toByteArray())
         }
     }
+
+    /** Nearby "Quick Share" connection request: the user must allow it before the token URL is handed out. */
+    private suspend fun knock(query: String, out: OutputStream, peer: String) {
+        if (incoming.value != null) return respond(out, 429, "text/plain", "Busy".toByteArray())
+        val name = URLDecoder.decode(query.split('&').firstOrNull { it.startsWith("name=") }?.removePrefix("name=") ?: "", "UTF-8").take(40).ifBlank { "Unknown device" }
+        val req = IncomingRequest(System.nanoTime(), name, -1, peer, CompletableDeferred())
+        incoming.value = req
+        val ok = withTimeoutOrNull(120_000) { req.answer.await() } ?: false
+        incoming.value = null
+        if (ok) respond(out, 200, "text/plain", url.toByteArray()) else { failures[peer] = (failures[peer] ?: 0) + 1; respond(out, 403, "text/plain", "Declined".toByteArray()) }
+    }
+
+    val port: Int get() = server.localPort
 
     private fun serve(index: Int?, range: String?, out: OutputStream, peer: String) {
         val item = index?.let { shared.getOrNull(it) } ?: return respond(out, 404, "text/plain", "Not found".toByteArray())

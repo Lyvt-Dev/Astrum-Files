@@ -26,6 +26,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -105,6 +106,7 @@ class DesktopTransferServer(private val shared: List<File>, ttlMs: Long) {
         val (m, t) = line(i).split(' ').let { (it.getOrNull(0) ?: "") to (it.getOrNull(1) ?: "") }
         val h = HashMap<String, String>(); while (true) { val l = line(i); if (l.isEmpty()) break; l.split(':', limit = 2).takeIf { it.size == 2 }?.let { h[it[0].trim().lowercase()] = it[1].trim() } }
         val path = t.substringBefore('?'); val q = t.substringAfter('?', "")
+        if (m == "GET" && path == "/knock") return knock(q, o, peer)
         if (!path.startsWith("/$token/")) { failures[peer] = (failures[peer] ?: 0) + 1; respond(o, 404, "text/plain", "Not found".toByteArray()); return }
         val rest = path.removePrefix("/$token/")
         when {
@@ -115,6 +117,16 @@ class DesktopTransferServer(private val shared: List<File>, ttlMs: Long) {
             else -> respond(o, 404, "text/plain", "Not found".toByteArray())
         }
     }
+
+    private suspend fun knock(q: String, o: OutputStream, peer: String) {
+        if (Transfer.incoming != null) return respond(o, 429, "text/plain", "Busy".toByteArray())
+        val name = URLDecoder.decode(q.split('&').firstOrNull { it.startsWith("name=") }?.removePrefix("name=") ?: "", "UTF-8").take(40).ifBlank { "Unknown device" }
+        val req = Incoming(name, -1, peer, CompletableDeferred()); Transfer.incoming = req
+        val ok = withTimeoutOrNull(120_000) { req.answer.await() } ?: false
+        Transfer.incoming = null
+        if (ok) respond(o, 200, "text/plain", url.toByteArray()) else { failures[peer] = (failures[peer] ?: 0) + 1; respond(o, 403, "text/plain", "Declined".toByteArray()) }
+    }
+    val port get() = server.localPort
 
     private fun serve(idx: Int?, range: String?, o: OutputStream, peer: String) {
         val f = idx?.let { shared.getOrNull(it) } ?: return respond(o, 404, "text/plain", "Not found".toByteArray())
@@ -165,6 +177,23 @@ x.onload=()=>{d.textContent=(x.status==200?'✅ ':'❌ ')+f.name+' — '+x.respo
 }
 
 object Transfer {
+    val deviceName: String = (System.getenv("COMPUTERNAME") ?: runCatching { java.net.InetAddress.getLocalHost().hostName }.getOrNull() ?: "PC").take(40)
+    val nearby = com.lyvt.files.core.network.NearbyDiscovery(deviceName, "pc")
+    var connecting by mutableStateOf<String?>(null)
+    val isWindows = System.getProperty("os.name").startsWith("Windows")
+    fun connect(p: com.lyvt.files.core.network.NearbyPeer) {
+        connecting = p.name; error = null
+        CoroutineScope(Dispatchers.IO).launch {
+            com.lyvt.files.core.network.NearbyDiscovery.requestAccess(p, deviceName)
+                .onSuccess { runCatching { Desktop.getDesktop().browse(URI(it)) } }.onFailure { error = it.message }
+            connecting = null
+        }
+    }
+    /** Opens the Windows Bluetooth file transfer wizard (fsquirt) — works with any phone, incl. Samsung. */
+    fun bluetooth(receive: Boolean) {
+        if (!isWindows) { error = "Bluetooth file transfer uses the Windows wizard and is only available on Windows."; return }
+        runCatching { ProcessBuilder("fsquirt.exe", if (receive) "-receive" else "-send").start() }.onFailure { error = "Could not open Bluetooth transfer: ${it.message}" }
+    }
     val queue = mutableStateListOf<File>()
     var server by mutableStateOf<DesktopTransferServer?>(null)
     var incoming by mutableStateOf<Incoming?>(null)
@@ -176,9 +205,9 @@ object Transfer {
         files.filter { it.isDirectory }.forEach { d -> d.walkTopDown().filter { it.isFile }.take(2000).forEach { if (it !in queue) queue.add(it) } } }
     fun start() {
         if (DesktopTransferServer.lanAddress() == null) { error = "No local network found. Connect the PC to the same Wi-Fi/LAN as your phone."; return }
-        stop(); runCatching { DesktopTransferServer(queue.toList(), 15 * 60_000L).also { it.start() } }.onSuccess { server = it; error = null }.onFailure { error = "Could not start: ${it.message}" }
+        stop(); runCatching { DesktopTransferServer(queue.toList(), 15 * 60_000L).also { it.start() } }.onSuccess { server = it; error = null; nearby.advertisePort = it.port }.onFailure { error = "Could not start: ${it.message}" }
     }
-    fun stop() { server?.stop(); server = null }
+    fun stop() { nearby.advertisePort = null; server?.stop(); server = null }
     fun load() = runCatching { JSONArray(Store.read("transfers.json") ?: "[]").let { a -> (0 until a.length()).map { a.getJSONObject(it) }.forEach { o ->
         history.add(TransferRecord(o.getString("d"), o.getString("n"), o.getLong("s"), o.getString("p"), o.getBoolean("ok"), o.getLong("at"))) } } }
     fun saveHistory() = Store.write("transfers.json", JSONArray(history.take(200).map { JSONObject().put("d", it.direction).put("n", it.name).put("s", it.size).put("p", it.peer).put("ok", it.ok).put("at", it.at) }).toString())
@@ -192,6 +221,7 @@ fun TransferScreen() {
     val s = Transfer.server
     var remaining by remember { mutableLongStateOf(0L) }
     var phoneUrl by remember { mutableStateOf("") }
+    LaunchedEffect(Unit) { Transfer.nearby.start() }
     LaunchedEffect(s) { while (s != null && Transfer.server == s) { remaining = (s.expiresAt - System.currentTimeMillis()) / 1000; if (remaining <= 0) { Transfer.stop(); break }; delay(1000) } }
     Row(Modifier.fillMaxSize().padding(24.dp), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -214,6 +244,7 @@ fun TransferScreen() {
                 Button(onClick = Transfer::start, modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(16.dp)) { Text("Start session (15 min)") }
                 Transfer.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             }
+            QuickShareCard()
             AstrumCard {
                 SectionHeader("Open a session started on your phone")
                 Text("On the phone: Tools → Astrum Transfer → Start session, then type the address shown under the QR code here.", style = MaterialTheme.typography.bodySmall)
@@ -244,10 +275,39 @@ fun TransferScreen() {
         }
     }
     Transfer.incoming?.let { r ->
-        AlertDialog(onDismissRequest = {}, title = { Text("Incoming file") }, text = { Text("${r.from} wants to send:\n\n${r.name}\n${Formatters.size(r.size)}\n\nSaved to Downloads\\Astrum Received.") },
+        if (r.size < 0) AlertDialog(onDismissRequest = {}, title = { Text("Nearby device wants to connect") },
+            text = { Text("“${r.name}” (${r.from}) wants to connect to this PC.\n\nIf you allow it, it can download the files you offer and send you files (each one still needs your OK).") },
+            confirmButton = { TextButton(onClick = { r.answer.complete(true) }) { Text("Allow") } }, dismissButton = { TextButton(onClick = { r.answer.complete(false) }) { Text("Decline") } })
+        else AlertDialog(onDismissRequest = {}, title = { Text("Incoming file") }, text = { Text("${r.from} wants to send:\n\n${r.name}\n${Formatters.size(r.size)}\n\nSaved to Downloads\\Astrum Received.") },
             confirmButton = { TextButton(onClick = { r.answer.complete(true) }) { Text("Accept") } }, dismissButton = { TextButton(onClick = { r.answer.complete(false) }) { Text("Decline") } })
     }
 }
 
 fun pickFiles(): List<File>? = java.awt.FileDialog(null as java.awt.Frame?, "Choose files", java.awt.FileDialog.LOAD).apply { isMultipleMode = true; isVisible = true }.files.toList().takeIf { it.isNotEmpty() }
 fun pickFolder(): File? = javax.swing.JFileChooser().apply { fileSelectionMode = javax.swing.JFileChooser.DIRECTORIES_ONLY }.let { if (it.showOpenDialog(null) == javax.swing.JFileChooser.APPROVE_OPTION) it.selectedFile else null }
+
+@Composable
+private fun QuickShareCard() {
+    val peers by Transfer.nearby.peers.collectAsState()
+    val discErr by Transfer.nearby.error.collectAsState()
+    AstrumCard {
+        SectionHeader("Quick Share · nearby devices")
+        Text("Phones and PCs with Astrum Files on the same Wi-Fi appear here while they have a session running. Click one to connect — the other device must tap Allow.",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (peers.isEmpty()) Text(discErr ?: "Searching… (start a session on the other device)", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 6.dp))
+        peers.forEach { p ->
+            Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(if (p.platform == "pc") "🖥  " else "📱  ")
+                Column(Modifier.weight(1f)) { Text(p.name, style = MaterialTheme.typography.bodyMedium); Text(p.host, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                Button(enabled = Transfer.connecting == null, onClick = { Transfer.connect(p) }) { Text(if (Transfer.connecting == p.name) "Waiting for OK…" else "Connect") }
+            }
+        }
+        SectionHeader("Bluetooth")
+        Text("Send or receive files via Bluetooth with any phone (Samsung, Pixel, …) using the Windows Bluetooth wizard. The PC must have Bluetooth and be paired with the phone.",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Row(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(enabled = Transfer.isWindows, onClick = { Transfer.bluetooth(false) }) { Text("Send via Bluetooth") }
+            OutlinedButton(enabled = Transfer.isWindows, onClick = { Transfer.bluetooth(true) }) { Text("Receive via Bluetooth") }
+        }
+    }
+}

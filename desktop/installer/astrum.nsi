@@ -20,9 +20,9 @@ SetCompressor /SOLID lzma
 !insertmacro MUI_UNPAGE_INSTFILES
 !insertmacro MUI_LANGUAGE "German"
 !insertmacro MUI_LANGUAGE "English"
-VIProductVersion "1.0.0.0"
+VIProductVersion "1.1.0.0"
 VIAddVersionKey /LANG=0 "ProductName" "Astrum Files"
-VIAddVersionKey /LANG=0 "FileVersion" "1.0.0"
+VIAddVersionKey /LANG=0 "FileVersion" "1.1.0"
 VIAddVersionKey /LANG=0 "FileDescription" "Astrum Files Setup"
 
 Section "Install"
@@ -35,7 +35,7 @@ Section "Install"
   WriteRegStr HKCU "Software\Astrum Files" "InstallDir" "$INSTDIR"
   !define UK "Software\Microsoft\Windows\CurrentVersion\Uninstall\AstrumFiles"
   WriteRegStr HKCU "${UK}" "DisplayName" "Astrum Files"
-  WriteRegStr HKCU "${UK}" "DisplayVersion" "1.0.0"
+  WriteRegStr HKCU "${UK}" "DisplayVersion" "1.1.0"
   WriteRegStr HKCU "${UK}" "Publisher" "Astrum"
   WriteRegStr HKCU "${UK}" "DisplayIcon" "$INSTDIR\astrum.ico"
   WriteRegStr HKCU "${UK}" "UninstallString" '"$INSTDIR\Uninstall.exe"'

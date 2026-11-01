@@ -12,6 +12,7 @@ java { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaV
 // Pure-JVM core shared with the Android app (no Android imports). Tested by the app's unit tests.
 val sharedCore = listOf(
     "com/lyvt/files/core/common/Formatters.kt",
+    "com/lyvt/files/core/network/Nearby.kt",
     "com/lyvt/files/core/common/NaturalOrder.kt",
     "com/lyvt/files/core/storage/FileModels.kt",
     "com/lyvt/files/core/storage/FileOperations.kt",
@@ -54,7 +55,7 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Msi, TargetFormat.Exe, TargetFormat.Deb)
             packageName = "Astrum Files"
-            packageVersion = "1.0.0"
+            packageVersion = "1.1.0"
             description = "Astrum Files for Windows"
             vendor = "Astrum"
             includeAllModules = true // bundled runtime: no separate Java install needed

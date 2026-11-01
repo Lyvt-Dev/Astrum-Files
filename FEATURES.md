@@ -125,3 +125,12 @@ The user has run 0.1.x on a physical phone. 0.2.0 has **not** been run on a devi
 | Windows MSI/EXE installer | 🟡 | Built by GitHub Actions on windows-latest. It cannot be built on this Linux host. |
 | Drag & drop from Windows Explorer | ⬜ | |
 | Network clients (SMB/SFTP/WebDAV/FTP) on desktop | ⬜ | |
+
+## Quick Share (phone 0.2.6 / PC 1.1.0)
+| Feature | Status | Notes |
+|---|---|---|
+| Nearby Astrum devices (auto-discovery) | ✅ | UDP broadcast beacon on port 47823 while a session runs; beacon has no token. Connecting requires "Allow" on the other device, then the normal token session is used. Same Wi-Fi required. |
+| Phone: Quick Share button | ✅ | Opens the system Quick Share (Samsung / Google) share target directly, falls back to the share sheet. |
+| Phone: Bluetooth button | ✅ | Opens the system Bluetooth share target (OBEX) — works with Windows "Receive files via Bluetooth". |
+| PC: Bluetooth send/receive | ✅ (Windows) | Opens the built-in Windows Bluetooth file transfer wizard (fsquirt). Not tested on real hardware. |
+| PC: Samsung/Google Quick Share protocol | ❌ | Proprietary protocol; use Google's "Quick Share for Windows" app or Astrum's nearby connect instead. |
