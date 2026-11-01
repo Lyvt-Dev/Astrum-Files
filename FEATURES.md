@@ -91,6 +91,8 @@ The user has run 0.1.x on a physical phone. 0.2.0 has **not** been run on a devi
 | Astrum Transfer: QR pairing, token auth, expiry, approval, multi-file, history, resumable downloads, NSD discovery | ✅ | Plain HTTP (see SECURITY.md). Folder transfer means selecting the files. |
 | Encrypted transfer channel (TLS) | ⬜ | |
 | Smart Organizer: rules, templates, dry-run preview, approval, undo, daily automatic runs | 🧪 | |
+| "Sort into folders" in Files (by type, by extension, by month, or chosen types such as ZIPs into one folder), with preview and undo | ✅ | Built on the organizer engine |
+| Animated brand intro after the system splash | ✅ | 1.4 s; shortened when reduce motion is on |
 | Collections, tags, notes (Room), export/import, move tracking, missing-file relink | ✅ | |
 | Storage widget, quick-access widget | ✅ | |
 | Recent-files / favorite-folders widgets | ⬜ | |

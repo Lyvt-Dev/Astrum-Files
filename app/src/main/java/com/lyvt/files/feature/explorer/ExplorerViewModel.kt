@@ -69,6 +69,7 @@ class ExplorerViewModel @Inject constructor(
     @dagger.hilt.android.qualifiers.ApplicationContext private val appContext: android.content.Context,
     val library: com.lyvt.files.core.storage.LibraryRepository,
     private val searches: com.lyvt.files.core.database.SearchDao,
+    private val organizer: com.lyvt.files.core.organizer.OrganizerRepository,
     savedState: SavedStateHandle,
 ) : ViewModel() {
     val rootPath = volumes.primaryRoot()
@@ -251,6 +252,38 @@ class ExplorerViewModel @Inject constructor(
     }
 
     suspend fun folderSize(path: String) = repo.folderSize(path)
+
+    // ---- Sort into folders (one-off organizer run on the current folder) ----
+    val sortPreview = MutableStateFlow<com.lyvt.files.core.organizer.OrganizerPlan?>(null)
+    val sortUndo = MutableStateFlow<com.lyvt.files.core.database.OrganizerRunEntity?>(null)
+    private var sortRule: com.lyvt.files.core.database.OrganizerRuleEntity? = null
+
+    /** [destination] uses organizer tokens; [extensions] empty = all files. Only files directly in this folder are sorted. */
+    fun previewSort(name: String, destination: String, extensions: String) = viewModelScope.launch {
+        val r = com.lyvt.files.core.database.OrganizerRuleEntity(name = name, sourceDir = _ui.value.path, destination = destination, extensions = extensions)
+        sortRule = r
+        sortPreview.value = organizer.plan(r)
+    }
+
+    fun runSort() {
+        val plan = sortPreview.value ?: return; val r = sortRule ?: return
+        sortPreview.value = null
+        opJob = viewModelScope.launch {
+            _ui.update { it.copy(operation = OperationState("Sorting", null, true)) }
+            val (res, run) = organizer.executeWithRun(r, plan)
+            _ui.update { it.copy(operation = null) }
+            reload()
+            if (res.journal.isNotEmpty()) sortUndo.value = run
+            emit("Sorted ${res.journal.size} file(s)" + if (res.failed.isNotEmpty()) ", ${res.failed.size} skipped: ${res.failed.first().second}" else "")
+        }
+    }
+
+    fun undoSort() = viewModelScope.launch {
+        val run = sortUndo.value ?: return@launch
+        sortUndo.value = null
+        val (ok, fail) = organizer.undo(run)
+        reload(); emit("Restored $ok file(s)" + if (fail > 0) ", $fail could not be restored" else "")
+    }
 
     fun mergePdfs(paths: List<String>) {
         opJob = viewModelScope.launch {

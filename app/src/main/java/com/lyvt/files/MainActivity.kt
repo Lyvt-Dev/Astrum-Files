@@ -7,6 +7,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.fragment.app.FragmentActivity
@@ -34,7 +35,14 @@ class MainActivity : FragmentActivity() {
             val settings by settingsRepository.settings.collectAsStateWithLifecycle(initialValue = AppSettings())
             LyvtTheme(settings) {
                 // Surface provides LocalContentColor = onBackground, so text is readable in both themes.
-                Surface(color = MaterialTheme.colorScheme.background) { LyvtRoot(settings, pendingRoute) }
+                Surface(color = MaterialTheme.colorScheme.background) {
+                    androidx.compose.foundation.layout.Box {
+                        LyvtRoot(settings, pendingRoute)
+                        // Plays once per launch (survives rotation), not when returning from background.
+                        var intro by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(savedInstanceState == null) }
+                        if (intro) com.lyvt.files.ui.SplashIntro(settings.reduceMotion) { intro = false }
+                    }
+                }
             }
         }
     }

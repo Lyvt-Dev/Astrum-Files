@@ -68,6 +68,7 @@ sealed interface ExplorerDialog {
     data class BatchRenameDialog(val paths: List<String>) : ExplorerDialog
     data class Pin(val item: FileItem) : ExplorerDialog
     data class Compare(val a: String, val b: String) : ExplorerDialog
+    data object SortIntoFolders : ExplorerDialog
 }
 
 @Composable
@@ -118,6 +119,7 @@ fun ExplorerDialogs(
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { Accents.forEachIndexed { i, _ -> Pill("${i + 1}", false) { vm.pin(dialog.item, i); onDismiss() } } } }
         }, confirmButton = {})
         is ExplorerDialog.Compare -> CompareDialog(dialog.a, dialog.b, onDismiss)
+        ExplorerDialog.SortIntoFolders -> SortIntoFoldersDialog(vm, onDismiss)
         ExplorerDialog.SelectionMenu -> {
             val sel = ui.selection.toList()
             AlertDialog(onDismissRequest = onDismiss, title = { Text("${sel.size} selected") }, text = {
@@ -343,4 +345,72 @@ private fun LibrarySection(item: FileItem, vm: ExplorerViewModel) {
         Pill("New…", false) { newCol = true }
     }
     if (newCol) TextInputDialog("New collection", label = "Name", confirm = "Create", onConfirm = { vm.newCollection(it, listOf(item.path)) }, onDismiss = { newCol = false })
+}
+
+private data class SortPreset(val label: String, val folder: String, val extensions: String)
+private val sortPresets = listOf(
+    SortPreset("Archives", "Archives", "zip,7z,rar,tar,gz,tgz,bz2,xz"),
+    SortPreset("Images", "Images", "jpg,jpeg,png,gif,webp,heic,heif,bmp,avif"),
+    SortPreset("Videos", "Videos", "mp4,mkv,webm,3gp,mov,avi,m4v"),
+    SortPreset("Audio", "Music", "mp3,m4a,aac,flac,ogg,opus,wav"),
+    SortPreset("Documents", "Documents", "pdf,doc,docx,xls,xlsx,ppt,pptx,odt,ods,txt,rtf,csv,epub"),
+    SortPreset("APKs", "APKs", "apk,apks,xapk"),
+)
+
+@Composable
+private fun SortIntoFoldersDialog(vm: ExplorerViewModel, onDismiss: () -> Unit) {
+    val preview by vm.sortPreview.collectAsStateWithLifecycle()
+    var mode by remember { mutableStateOf("type") }
+    var preset by remember { mutableStateOf(sortPresets[0]) }
+    var folder by remember { mutableStateOf(sortPresets[0].folder) }
+    var exts by remember { mutableStateOf(sortPresets[0].extensions) }
+    val p = preview
+    if (p != null) {
+        val uiState by vm.ui.collectAsStateWithLifecycle()
+        val root = uiState.path
+        val groups = p.moves.groupBy { it.to.parentFile!!.absolutePath.removePrefix(root).trimStart('/') }
+        AlertDialog(onDismissRequest = { vm.sortPreview.value = null; onDismiss() }, title = { Text("Preview") }, text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                if (p.moves.isEmpty()) Text("Nothing to sort here — no matching files directly in this folder.")
+                else {
+                    Text("${p.moves.size} file(s) · ${Formatters.size(p.totalBytes)}. Existing files are never overwritten; you can undo afterwards.", style = MaterialTheme.typography.bodySmall)
+                    Spacer(Modifier.height(8.dp))
+                    groups.toSortedMap().forEach { (dir, moves) ->
+                        Text("📁 $dir  (${moves.size})", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 6.dp))
+                        moves.take(4).forEach { Text("   ${it.from.name}", style = MaterialTheme.typography.bodySmall, maxLines = 1) }
+                        if (moves.size > 4) Text("   … ${moves.size - 4} more", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+        }, confirmButton = { TextButton(enabled = p.moves.isNotEmpty(), onClick = { vm.runSort(); onDismiss() }) { Text("Sort ${p.moves.size} files") } },
+            dismissButton = { TextButton(onClick = { vm.sortPreview.value = null }) { Text("Back") } })
+        return
+    }
+    AlertDialog(onDismissRequest = onDismiss, title = { Text("Sort into folders") }, text = {
+        Column(Modifier.verticalScroll(rememberScrollState())) {
+            Text("Moves files in this folder into subfolders.", style = MaterialTheme.typography.bodySmall)
+            Spacer(Modifier.height(8.dp))
+            listOf("type" to "Everything by type (Images, Videos, Archives…)", "pick" to "Only certain files into one folder",
+                "ext" to "Everything by extension (ZIP, PDF, …)", "month" to "Everything by month (2024-05)").forEach { (k, l) ->
+                Row(verticalAlignment = Alignment.CenterVertically) { RadioButton(mode == k, { mode = k }); Text(l, style = MaterialTheme.typography.bodyMedium) }
+            }
+            if (mode == "pick") {
+                Row(Modifier.horizontalScroll(rememberScrollState()).padding(vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    sortPresets.forEach { sp -> Pill(sp.label, preset == sp) { preset = sp; folder = sp.folder; exts = sp.extensions } }
+                }
+                OutlinedTextField(folder, { folder = it }, label = { Text("Folder name") }, singleLine = true, shape = RoundedCornerShape(12.dp),
+                    isError = FileOperations.validateName(folder) != null)
+                OutlinedTextField(exts, { exts = it }, label = { Text("Extensions") }, singleLine = true, shape = RoundedCornerShape(12.dp))
+            }
+        }
+    }, confirmButton = {
+        TextButton(enabled = mode != "pick" || (FileOperations.validateName(folder) == null && exts.isNotBlank()), onClick = {
+            when (mode) {
+                "type" -> vm.previewSort("Sort by type", "{category}", "")
+                "ext" -> vm.previewSort("Sort by extension", "{ext}", "")
+                "month" -> vm.previewSort("Sort by month", "{yyyy}-{MM}", "")
+                else -> vm.previewSort("Sort ${folder.trim()}", folder.trim(), exts)
+            }
+        }) { Text("Preview") }
+    }, dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } })
 }

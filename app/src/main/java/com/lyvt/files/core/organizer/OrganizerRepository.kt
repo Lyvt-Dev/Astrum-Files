@@ -25,13 +25,18 @@ class OrganizerRepository @Inject constructor(private val dao: OrganizerDao, pri
 
     suspend fun plan(r: OrganizerRuleEntity) = withContext(Dispatchers.IO) { OrganizerEngine.plan(r.toRule()) }
 
-    suspend fun execute(r: OrganizerRuleEntity, plan: OrganizerPlan, onProgress: (Int) -> Unit = {}): OrganizerResult = withContext(Dispatchers.IO) {
+    suspend fun execute(r: OrganizerRuleEntity, plan: OrganizerPlan, onProgress: (Int) -> Unit = {}): OrganizerResult =
+        executeWithRun(r, plan, onProgress).first
+
+    /** Executes and returns the recorded run so callers can offer an immediate undo. One-off rules (id 0) are not saved. */
+    suspend fun executeWithRun(r: OrganizerRuleEntity, plan: OrganizerPlan, onProgress: (Int) -> Unit = {}): Pair<OrganizerResult, OrganizerRunEntity> = withContext(Dispatchers.IO) {
         val res = OrganizerEngine.execute(plan, onProgress)
-        dao.insertRun(OrganizerRunEntity(ruleName = r.name, timestamp = System.currentTimeMillis(), journal = OrganizerEngine.journalToJson(res.journal),
-            moved = res.journal.size, failed = res.failed.size))
-        dao.upsert(r.copy(lastRun = System.currentTimeMillis()))
+        val run = OrganizerRunEntity(ruleName = r.name, timestamp = System.currentTimeMillis(), journal = OrganizerEngine.journalToJson(res.journal),
+            moved = res.journal.size, failed = res.failed.size)
+        val runId = dao.insertRun(run)
+        if (r.id != 0L) dao.upsert(r.copy(lastRun = System.currentTimeMillis()))
         ops.insert(OperationEntity(type = "organize", summary = "${r.name}: ${res.journal.size} moved", success = res.failed.isEmpty()))
-        res
+        res to run.copy(id = runId)
     }
 
     suspend fun undo(run: OrganizerRunEntity): Pair<Int, Int> = withContext(Dispatchers.IO) {

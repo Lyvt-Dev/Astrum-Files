@@ -111,6 +111,13 @@ fun ExplorerPane(nav: NavHostController, vm: ExplorerViewModel, handleBack: Bool
     val clip by vm.clipboard.current.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     LaunchedEffect(Unit) { vm.messages.collect { snackbar.showSnackbar(it) } }
+    val undoRun by vm.sortUndo.collectAsStateWithLifecycle()
+    LaunchedEffect(undoRun) {
+        if (undoRun != null) {
+            val r = snackbar.showSnackbar("Files sorted", actionLabel = "Undo", duration = androidx.compose.material3.SnackbarDuration.Long)
+            if (r == androidx.compose.material3.SnackbarResult.ActionPerformed) vm.undoSort() else vm.sortUndo.value = null
+        }
+    }
 
     var dialog by remember { mutableStateOf<ExplorerDialog?>(null) }
     var menuFor by remember { mutableStateOf<FileItem?>(null) }
@@ -129,7 +136,7 @@ fun ExplorerPane(nav: NavHostController, vm: ExplorerViewModel, handleBack: Bool
             Column(Modifier.statusBarsPadding()) {
                 if (ui.selection.isNotEmpty()) SelectionBar(ui.selection.size, vm, onMore = { dialog = ExplorerDialog.SelectionMenu })
                 else if (ui.searchText != null) SearchBar(ui.searchText!!, ui.searching, ui.searchResults.size, vm, vm::search, vm::closeSearch)
-                else BrowseBar(ui, settings.gridView, settings.showHidden, vm, onSort = { dialog = ExplorerDialog.Sort }, nav = nav)
+                else BrowseBar(ui, settings.gridView, settings.showHidden, vm, onSort = { dialog = ExplorerDialog.Sort }, nav = nav, onSortFolders = { dialog = ExplorerDialog.SortIntoFolders })
                 if (ui.tabs.size > 1) TabsRow(ui, vm)
                 if (ui.searchText == null) Breadcrumbs(ui.path, vm.rootPath, vm::open)
             }
@@ -221,7 +228,7 @@ private fun ItemMenu(item: FileItem, fav: Boolean, vm: ExplorerViewModel, nav: N
 }
 
 @Composable
-private fun BrowseBar(ui: ExplorerUi, grid: Boolean, showHidden: Boolean, vm: ExplorerViewModel, onSort: () -> Unit, nav: NavHostController) {
+private fun BrowseBar(ui: ExplorerUi, grid: Boolean, showHidden: Boolean, vm: ExplorerViewModel, onSort: () -> Unit, nav: NavHostController, onSortFolders: () -> Unit) {
     var menu by remember { mutableStateOf(false) }
     Row(Modifier.fillMaxWidth().padding(start = 8.dp, end = 4.dp, top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         if (ui.tabs[ui.activeTab].back.isNotEmpty()) IconButton(onClick = { vm.back() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
@@ -234,6 +241,7 @@ private fun BrowseBar(ui: ExplorerUi, grid: Boolean, showHidden: Boolean, vm: Ex
         Box {
             IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, null) }
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                DropdownMenuItem(text = { Text("Sort into folders…") }, onClick = { onSortFolders(); menu = false })
                 DropdownMenuItem(text = { Text("New tab") }, onClick = { vm.newTab(); menu = false })
                 DropdownMenuItem(text = { Text(stringResource(R.string.select_all)) }, onClick = { vm.selectAll(); menu = false })
                 DropdownMenuItem(text = { Text(if (showHidden) "Hide hidden files" else stringResource(R.string.show_hidden)) }, onClick = { vm.toggleHidden(); menu = false })
