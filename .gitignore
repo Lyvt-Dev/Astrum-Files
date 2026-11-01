@@ -8,3 +8,4 @@ keystore.properties
 *.iml
 .kotlin/
 captures/
+/*.apk
