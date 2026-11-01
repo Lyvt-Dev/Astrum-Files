@@ -1,0 +1,101 @@
+# Feature checklist
+
+**Legend**
+- 🧪 Implemented and covered by JVM unit tests (pure logic; Android framework paths not exercised)
+- ✅ Implemented and wired into the UI. It compiles and passes lint, but has **not yet been verified on a device or emulator**.
+- 🟡 Partial (the limitation is described)
+- ⬜ Not started
+- 🚫 Unsupported by design or by platform
+
+**Verification status of this build:** `assembleDebug` ✔, `testDebugUnitTest` ✔ (32 tests), `lintDebug` ✔ (0 errors).
+No emulator or device run yet, because the build host has no KVM.
+
+## Milestone 1: Foundation
+| Feature | Status | Notes |
+|---|---|---|
+| Kotlin + Compose + Material 3 project, Gradle KTS, version catalog | ✅ | AGP 8.11, Kotlin 2.2, compile/target SDK 36, min SDK 29 |
+| Hilt DI, Room, DataStore, coroutines/StateFlow MVVM | ✅ | |
+| Custom design system (tokens, cards, donut, usage bar, empty/loading states) | ✅ | Light (ice blue) and dark (graphite) palettes, 6 accents, Material You |
+| Five-section navigation (Home, Files, Cleaner, Analytics, Vault) | ✅ | Bottom bar on phones, navigation rail at ≥600dp |
+| Edge-to-edge, predictive back (`enableOnBackInvokedCallback`) | ✅ | |
+| Permission onboarding (all-files access, or limited media mode) | ✅ | |
+| Custom font (Manrope / Plus Jakarta Sans) | ⬜ | Uses the system sans-serif with a tuned type scale. The font file is not bundled yet. |
+| EN + DE localisation | 🟡 | Navigation and core strings are in `values/` and `values-de/`. Many dialog and feature strings are still hard-coded English. |
+
+## Milestone 2: Core file manager
+| Feature | Status | Notes |
+|---|---|---|
+| Browse, list/grid, thumbnails, hidden files toggle | ✅ | |
+| Create file/folder, rename (incl. extension), duplicate | 🧪 | Name validation, no overwrite on rename |
+| Copy/move with progress, cancellation, conflict policy | 🧪 | Atomic `.lyvtpart` writes, copy-into-self guard, free-space check |
+| Delete → trash, restore, permanent delete | ✅ | `TrashManager` (same-volume rename). Restore picks a unique name if the original path is taken. |
+| Share, open with external apps (FileProvider) | ✅ | |
+| Multi-select, select all, invert | ✅ | |
+| Recursive search with operators (`ext:` `type:` `size>` `after:` `before:` `re:` quotes) | 🧪 | Streams results, cancellable |
+| Sort (name natural / date / size / type), folders-first, ascending/descending | 🧪 | |
+| Favorites, pin folders with color label | ✅ | |
+| Properties: MIME, size, dates, permissions, SHA-256/MD5, checksum compare, EXIF / media metadata | ✅ | |
+| Folder size calculation | ✅ | |
+| Breadcrumbs, back/forward history, tabs | ✅ | |
+| Split view on tablets | ✅ | Two independent panes sharing the clipboard |
+| In-app clipboard + previous-clipboard restore | 🟡 | Keeps the last 10 entries. The UI only restores the previous one. |
+| Batch rename (pattern, counter, padding, date, regex, preview) | 🧪 | |
+| File and directory comparison | ✅ | |
+| Operation history | ✅ | Room log + screen |
+| SD card / multiple volumes | ✅ | `StorageManager` volumes with real `StatFs`. Removed cards disappear, and missing folders show an error state. |
+| Drag and drop | ⬜ | |
+| Background (WorkManager) transfers that survive process death | ⬜ | Transfers currently run in `viewModelScope` |
+| Storage Access Framework tree browsing (no all-files access) | ⬜ | |
+| Bookmarked/saved searches | ⬜ | |
+
+## Milestone 3: Feature parity
+| Feature | Status | Notes |
+|---|---|---|
+| Home: storage cards per volume, animated donut, categories (MediaStore), quick access, recent, frequent, favorites, cleanup tips | ✅ | |
+| Dashboard customisation (order, visibility, compact mode) | ✅ | |
+| Duplicate finder (size → 16 KiB hash → full SHA-256), keeps one copy | 🧪 | |
+| Similar photos (dHash, adjustable threshold) | ✅ | Heuristic, labelled as such. Capped at 4000 images per scan. |
+| Blurry photos (Laplacian variance, adjustable) | ✅ | Heuristic, labelled as such |
+| Large files (threshold), old files (months, modification-based), empty folders | ✅ | |
+| Download cleaner (APKs, partial downloads, old downloads), screenshots by day | ✅ | |
+| Unused apps (UsageStats, explains missing permission) | ✅ | Launcher apps only |
+| Cleaner safety: review list, savings estimate, confirmation, trash, protected folders, exclusions, cancel | ✅ | |
+| Scan history | ⬜ | |
+| Analytics: device vs inspectable storage, category donut, treemap, extension bars, largest files, duplicate waste, trend | ✅ | Trend uses snapshots taken at most every 6 hours when Home opens |
+| Folder drill-down from charts | ✅ | Opens the folder in Files |
+| Vault: PIN, biometrics, AES-256-GCM, Keystore binding, recovery code, encrypted thumbs/index, folders, search, auto-lock, export, backup/restore | 🧪 / ✅ | Crypto core is unit-tested. Keystore and biometric paths still need device testing. |
+| Vault viewers | 🟡 | Decrypts to app-private cache, then uses the built-in image/video/PDF/text viewers |
+| Archive: create ZIP (AES-256, level), extract ZIP/7z/TAR(.gz/.bz2/.xz)/GZ/BZ2, browse, selected extract, test | 🧪 | |
+| ZIP Slip / bomb / overwrite protection | 🧪 | |
+| Creating 7z/TAR | ⬜ | |
+| RAR | 🚫 | Proprietary format, and there is no maintained, permissively licensed extractor |
+| Trash: restore, original path, date, sort, multi-select, retention, size limit, stats | ✅ | |
+| Android MediaStore trash integration | ⬜ | |
+| Image viewer: zoom, double tap, swipe gallery, rotate, EXIF, slideshow, share, crop (square), save edited copy, wallpaper | ✅ | Free-form crop is not implemented |
+| Video/music player (Media3): background service, notification and lock screen, speed, sleep timer, queue, shuffle/repeat, PiP, gestures, resume, track selection | ✅ | Codec support is whatever the device provides. No bundled decoders. |
+| Album artwork / music library browsing | 🟡 | Shown by Media3's PlayerView when embedded. There is no dedicated library screen. |
+| Playlists persisted | ⬜ | Queue = files in the same folder |
+| PDF: page render, zoom, rotate, bookmarks, info, print, share | ✅ | |
+| PDF text search / selection | 🚫 | Not supported by `PdfRenderer` before API 35 |
+| Text/code editor: highlighting, line numbers, find and replace, safe save | ✅ | Up to 2 MB editable, 8 MB viewable |
+| Office document preview (docx/xlsx) | ⬜ | Opens in external apps |
+
+## Milestone 4: Advanced
+| Feature | Status |
+|---|---|
+| SFTP / WebDAV / SMB clients, saved connections, credential encryption | ⬜ |
+| Phone-to-PC transfer (QR pairing, token-authenticated, expiring) | ⬜ |
+| Automation rules (preview, dry run, schedule, history) | ⬜ |
+| Tags and labels | 🟡 Database schema and DAO only, no UI |
+| Collections, saved searches, home-screen shortcuts, widgets | ⬜ |
+| APK metadata viewer | ⬜ |
+| QR-code sharing | ⬜ |
+
+## Milestone 5: Quality
+| Feature | Status |
+|---|---|
+| JVM unit tests: file ops, copy/move/conflicts, search, natural sort, batch rename, duplicates, scanner, vault crypto, archive security | 🧪 32 tests |
+| Compose UI tests, instrumentation tests | ⬜ |
+| Settings: theme, Material You, accent, font size, density, grid, reduced motion, sorting, start page, hidden files, thumbnails, trash retention/limit, vault lock, exclusions, protected dirs, settings backup/restore | ✅ |
+| Accessibility audit (TalkBack labels, contrast) | 🟡 Content descriptions on key controls; no full audit yet |
+| Benchmarks / profiling | ⬜ No numbers are claimed |
