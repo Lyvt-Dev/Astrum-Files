@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name" translatable="false">Lyvt Files</string>
+    <string name="app_name" translatable="false">Astrum Files - Datei Manager</string>
     <string name="nav_home">Home</string>
     <string name="nav_files">Files</string>
     <string name="nav_cleaner">Cleaner</string>

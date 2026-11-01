@@ -105,7 +105,7 @@ fun HomeScreen(nav: NavHostController, vm: HomeViewModel = hiltViewModel()) {
         item {
             Row(Modifier.statusBarsPadding().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text("Lyvt Files", style = MaterialTheme.typography.headlineMedium)
+                    Text("Astrum Files", style = MaterialTheme.typography.headlineMedium)
                     Text("Everything on this device, organised.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 IconButton(onClick = { customize = true }) { Icon(Icons.Filled.Tune, "Customize dashboard") }

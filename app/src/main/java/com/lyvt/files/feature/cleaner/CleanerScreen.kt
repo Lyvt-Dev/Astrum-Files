@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Apps
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.BlurOn
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Download
@@ -109,21 +110,22 @@ fun CleanerScreen(nav: NavHostController, vm: CleanerViewModel = hiltViewModel()
         }) { pad ->
         val mode = ui.mode
         if (mode == null) {
-            LazyColumn(Modifier.padding(pad).fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            LazyColumn(Modifier.padding(pad).fillMaxSize(), contentPadding = PaddingValues(start = 18.dp, end = 18.dp, bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 item {
-                    Column(Modifier.statusBarsPadding()) {
+                    Column(Modifier.statusBarsPadding().padding(top = 12.dp, bottom = 6.dp)) {
                         Text(stringResource(R.string.nav_cleaner), style = MaterialTheme.typography.headlineMedium)
                         Text("Everything is reviewed by you before anything is removed. Deleted items go to the trash.",
                             style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
                 items(tools) { t ->
-                    LyvtCard(onClick = { vm.open(t.mode) }) {
+                    LyvtCard(padding = 14.dp, onClick = { vm.open(t.mode) }) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             IconBadge(t.icon, t.color)
                             Spacer(Modifier.width(14.dp))
-                            Column { Text(stringResource(t.title), style = MaterialTheme.typography.titleMedium)
+                            Column(Modifier.weight(1f)) { Text(stringResource(t.title), style = MaterialTheme.typography.titleMedium)
                                 Text(t.desc, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                            Icon(Icons.Filled.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }

@@ -94,7 +94,7 @@ fun FileCategory.icon(): ImageVector = when (this) {
 @Composable
 fun LyvtCard(modifier: Modifier = Modifier, padding: Dp = 18.dp, onClick: (() -> Unit)? = null, content: @Composable ColumnScope.() -> Unit) {
     val shape = RoundedCornerShape(24.dp)
-    val m = modifier.clip(shape).background(MaterialTheme.colorScheme.surfaceContainerLow)
+    val m = modifier.fillMaxWidth().clip(shape).background(MaterialTheme.colorScheme.surfaceContainerLow)
         .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
         .let { if (onClick != null) it.combinedClickable(onClick = onClick) else it }
         .padding(padding)
