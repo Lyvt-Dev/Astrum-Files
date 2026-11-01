@@ -110,3 +110,18 @@ The user has run 0.1.x on a physical phone. 0.2.0 has **not** been run on a devi
 | Settings: theme, Material You, accent, font size, density, grid, reduced motion, sorting, start page, hidden files, thumbnails, trash retention/limit, vault lock, exclusions, protected dirs, settings backup/restore | ✅ |
 | Accessibility audit (TalkBack labels, contrast) | 🟡 Content descriptions on key controls; no full audit yet |
 | Benchmarks / profiling | ⬜ No numbers are claimed |
+
+## Windows desktop app (`desktop/`)
+| Feature | Status | Notes |
+|---|---|---|
+| Shared core (file ops, search, batch rename, organizer, archives, duplicates, vault cipher) | 🧪 | Same code as Android, compiled for desktop |
+| Explorer: sidebar/drives, table/grid, sort, search, copy/move/paste + conflicts + progress/cancel, Recycle Bin delete, rename, batch rename, ZIP/extract, sort into folders + undo, compare, properties + hashes, PDF merge, shortcuts, context menus | ✅ | Launched and screenshotted on Linux/Xvfb. Not yet run on real Windows. |
+| Viewers: image (zoom/rotate/slideshow/convert), text/code editor, PDF (search/extract/split/rotate), archives | ✅ | Audio/video open in the system player |
+| Cleaner (8 tools) with progress and safe deletion | ✅ | |
+| Analytics (drives, donut, treemap, extensions, largest, duplicate waste, trend) | ✅ | |
+| Vault (password + recovery code, decoy, auto-lock, backup) | 🧪 | Round-trip, wrong-password, decoy-isolation and recovery tests |
+| Astrum Transfer PC ↔ phone (QR, token, expiry, approval, history) | ✅ | Plain HTTP on the LAN, as on Android |
+| Smart Organizer (rules, templates, preview, undo) | ✅ | |
+| Windows MSI/EXE installer | 🟡 | Built by GitHub Actions on windows-latest. It cannot be built on this Linux host. |
+| Drag & drop from Windows Explorer | ⬜ | |
+| Network clients (SMB/SFTP/WebDAV/FTP) on desktop | ⬜ | |

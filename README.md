@@ -42,6 +42,15 @@ and built-in media and document viewers.
   gestures, resume position), PDF viewer (system renderer, zoom, rotate, bookmarks, print, share), and a text/code
   editor (syntax highlighting, line numbers, find and replace, safe save).
 
+## Windows desktop app
+
+`desktop/` contains **Astrum Files for Windows** (Compose for Desktop). It has the same design as the phone app and
+shares its core logic: files, cleaner, analytics, vault, organizer and Astrum Transfer between PC and phone. See
+[`desktop/README.md`](desktop/README.md). Windows installers (`.msi` / `.exe`) are built by the GitHub Actions
+workflow in `.github/workflows/build.yml`.
+
+![Desktop](docs/desktop-files.png)
+
 ## Build
 
 Requirements: JDK 17+ (tested with JDK 21), Android SDK platform 36 and build-tools 36.

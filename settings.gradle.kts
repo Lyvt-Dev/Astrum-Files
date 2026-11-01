@@ -3,6 +3,7 @@ pluginManagement {
         google()
         mavenCentral()
         gradlePluginPortal()
+        maven("https://maven.pkg.jetbrains.space/public/p/compose/dev")
     }
 }
 dependencyResolutionManagement {
@@ -14,3 +15,4 @@ dependencyResolutionManagement {
 }
 rootProject.name = "LyvtFiles"
 include(":app")
+include(":desktop")

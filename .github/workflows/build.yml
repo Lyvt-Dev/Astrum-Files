@@ -1,0 +1,43 @@
+name: Build Astrum Files
+
+on:
+  push:
+    branches: [ "claude/**", "main" ]
+  workflow_dispatch:
+
+jobs:
+  windows-desktop:
+    name: Windows installer (MSI + EXE)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: "21" }
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Desktop tests
+        run: ./gradlew :desktop:test --no-daemon
+      - name: Package MSI, EXE and portable JAR
+        run: ./gradlew :desktop:packageMsi :desktop:packageExe :desktop:packageUberJarForCurrentOS --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AstrumFiles-Windows
+          path: |
+            desktop/build/compose/binaries/main/msi/*.msi
+            desktop/build/compose/binaries/main/exe/*.exe
+            desktop/build/compose/jars/*.jar
+
+  android:
+    name: Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: "21" }
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Unit tests and debug APK
+        run: ./gradlew :app:testDebugUnitTest :app:assembleDebug --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AstrumFiles-Android-debug
+          path: app/build/outputs/apk/debug/*.apk
