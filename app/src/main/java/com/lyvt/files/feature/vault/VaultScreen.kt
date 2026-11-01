@@ -140,13 +140,20 @@ fun VaultScreen(nav: NavHostController, vm: VaultViewModel = hiltViewModel()) {
         }, confirmButton = { TextButton(onClick = { vm.recoveryCode.value = null; offerFingerprint = true }) { Text("I have saved it") } })
     }
     val ctx = LocalContext.current
-    if (offerFingerprint && biometricAvailable(ctx) && !vm.repo.biometricEnrolled()) {
+    val wants by vm.wantFingerprint.collectAsStateWithLifecycle()
+    LaunchedEffect(state) {
+        if (state is VaultState.Unlocked && !vm.repo.biometricEnrolled() && biometricAvailable(ctx)) {
+            val prefs = ctx.getSharedPreferences("vault_ui", android.content.Context.MODE_PRIVATE)
+            if (wants || !prefs.getBoolean("fp_offered", false)) { offerFingerprint = true; prefs.edit().putBoolean("fp_offered", true).apply() }
+        }
+    }
+    if (offerFingerprint && recovery == null && biometricAvailable(ctx) && !vm.repo.biometricEnrolled()) {
         AlertDialog(onDismissRequest = { offerFingerprint = false }, icon = { Icon(Icons.Filled.Fingerprint, null) }, title = { Text("Unlock with fingerprint?") }, text = {
             Text("Open the vault with your fingerprint instead of typing the PIN. The PIN and recovery code keep working.")
         }, confirmButton = { TextButton(onClick = {
-            offerFingerprint = false
-            vm.repo.biometricCipher(forEnroll = true)?.let { c -> (ctx as? FragmentActivity)?.let { promptBiometric(it, c, "Enable fingerprint unlock", vm::biometricEnroll) { } } }
-        }) { Text("Enable") } }, dismissButton = { TextButton(onClick = { offerFingerprint = false }) { Text("Not now") } })
+            offerFingerprint = false; vm.wantFingerprint.value = false
+            vm.repo.biometricCipher(forEnroll = true)?.let { c -> (ctx as? FragmentActivity)?.let { promptBiometric(it, c, "Enable fingerprint unlock", vm::biometricEnroll) { m -> vm.error.value = m } } }
+        }) { Text("Enable") } }, dismissButton = { TextButton(onClick = { offerFingerprint = false; vm.wantFingerprint.value = false }) { Text("Not now") } })
     }
 }
 
@@ -206,7 +213,9 @@ private fun LockedView(vm: VaultViewModel) {
     val error by vm.error.collectAsStateWithLifecycle()
     val ctx = LocalContext.current
     val activity = ctx as? FragmentActivity
-    val bio = vm.repo.biometricEnrolled() && biometricAvailable(ctx)
+    val hasFingerprint = biometricAvailable(ctx)
+    val bio = vm.repo.biometricEnrolled() && hasFingerprint
+    var hint by remember { mutableStateOf<String?>(null) }
     fun tryBio() {
         val c = vm.repo.biometricCipher(forEnroll = false) ?: run { vm.error.value = "Biometric key changed — use your PIN"; return }
         activity?.let { promptBiometric(it, c, "Unlock vault", vm::biometricUnlock) { m -> vm.error.value = m } }
@@ -221,9 +230,17 @@ private fun LockedView(vm: VaultViewModel) {
         error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp)) }
         Spacer(Modifier.height(16.dp))
         Button(enabled = pin.length >= 4, onClick = { vm.unlock(pin); pin = "" }, modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(16.dp)) { Text(stringResource(R.string.vault_unlock)) }
-        if (bio) OutlinedButton(onClick = ::tryBio, modifier = Modifier.fillMaxWidth().padding(top = 10.dp).height(52.dp), shape = RoundedCornerShape(16.dp)) {
+        if (hasFingerprint) OutlinedButton(onClick = {
+            if (bio) tryBio() else { vm.wantFingerprint.value = true; hint = "Enter your PIN once — fingerprint unlock is then switched on for next time." }
+        }, modifier = Modifier.fillMaxWidth().padding(top = 10.dp).height(52.dp), shape = RoundedCornerShape(16.dp)) {
             Icon(Icons.Filled.Fingerprint, null); Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.vault_biometric))
         }
+        hint?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 8.dp)) }
+        if (!hasFingerprint) Text(
+            if (BiometricManager.from(ctx).canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_WEAK) == BiometricManager.BIOMETRIC_SUCCESS)
+                "This phone's biometric sensor is not rated strong enough (Android Class 3) to protect encryption keys, so the vault uses your PIN."
+            else "No fingerprint set up on this phone. Add one in Android Settings → Security to unlock the vault with it.",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 10.dp))
         TextButton(onClick = { recover = true }) { Text("Forgot PIN? Use recovery code") }
     }
     if (recover) {

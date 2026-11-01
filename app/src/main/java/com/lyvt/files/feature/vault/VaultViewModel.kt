@@ -22,6 +22,8 @@ class VaultViewModel @Inject constructor(val repo: VaultRepository) : ViewModel(
     val busyFraction = MutableStateFlow<Float?>(null)
     val recoveryCode = MutableStateFlow<String?>(null)
     val error = MutableStateFlow<String?>(null)
+    /** Set when the user tapped the fingerprint button before fingerprint unlock was enabled. */
+    val wantFingerprint = MutableStateFlow(false)
     private val _messages = MutableSharedFlow<String>(extraBufferCapacity = 4)
     val messages = _messages.asSharedFlow()
     private val thumbs = HashMap<String, Bitmap?>()
@@ -45,7 +47,11 @@ class VaultViewModel @Inject constructor(val repo: VaultRepository) : ViewModel(
     }
 
     fun biometricUnlock(c: Cipher) { repo.completeBiometricUnlock(c).onFailure { error.value = "Biometric unlock failed" } }
-    fun biometricEnroll(c: Cipher) { repo.completeBiometricEnroll(c); viewModelScope.launch { _messages.emit("Biometric unlock enabled") } }
+    fun biometricEnroll(c: Cipher) {
+        runCatching { repo.completeBiometricEnroll(c) }
+            .onSuccess { viewModelScope.launch { _messages.emit("Fingerprint unlock enabled for the vault") } }
+            .onFailure { viewModelScope.launch { _messages.emit("Could not enable fingerprint: ${it.message}") } }
+    }
 
     fun lock() = repo.lock()
 
