@@ -19,6 +19,7 @@ import javax.inject.Inject
 class VaultViewModel @Inject constructor(val repo: VaultRepository) : ViewModel() {
     val state = repo.state
     val busy = MutableStateFlow<String?>(null)
+    val busyFraction = MutableStateFlow<Float?>(null)
     val recoveryCode = MutableStateFlow<String?>(null)
     val error = MutableStateFlow<String?>(null)
     private val _messages = MutableSharedFlow<String>(extraBufferCapacity = 4)
@@ -50,10 +51,11 @@ class VaultViewModel @Inject constructor(val repo: VaultRepository) : ViewModel(
 
     fun import(paths: List<String>, folder: String, deleteOriginals: Boolean) = viewModelScope.launch {
         busy.value = "Encrypting ${paths.size} file(s)…"
-        runCatching { repo.import(paths.map(::File), folder, deleteOriginals) { busy.value = "Encrypting $it / ${paths.size}…" } }
+        busyFraction.value = 0f
+        runCatching { repo.import(paths.map(::File), folder, deleteOriginals) { busy.value = "Encrypting $it of ${paths.size} files"; busyFraction.value = it.toFloat() / paths.size } }
             .onSuccess { _messages.emit("Added $it file(s) to the vault" + if (deleteOriginals) " and removed originals" else "") }
             .onFailure { _messages.emit("Import failed: ${it.message}") }
-        busy.value = null
+        busy.value = null; busyFraction.value = null
     }
 
     fun export(entries: List<VaultEntry>) = viewModelScope.launch {

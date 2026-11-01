@@ -69,6 +69,7 @@ fun AnalyticsScreen(nav: NavHostController, vm: AnalyticsViewModel = hiltViewMod
     val volume by vm.volume.collectAsStateWithLifecycle()
     val history by vm.history.collectAsStateWithLifecycle()
     val waste by vm.duplicateWaste.collectAsStateWithLifecycle()
+    val wasteP by vm.wasteProgress.collectAsStateWithLifecycle()
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item {
@@ -91,7 +92,10 @@ fun AnalyticsScreen(nav: NavHostController, vm: AnalyticsViewModel = hiltViewMod
                 }
             }
         }
-        if (running) item { LoadingState(stringResource(R.string.scanning), "$progress files indexed") }
+        if (running) item {
+            com.lyvt.files.ui.ScanProgressCard(stringResource(R.string.scanning), "${progress.files} files · ${Formatters.size(progress.bytes)} checked",
+                progress.fraction, estimated = true)
+        }
         val s = scan
         if (s == null && !running) item {
             EmptyState(Icons.Outlined.Analytics, "No analysis yet", "Run a scan to see where your space goes.") { Button(onClick = { vm.scan(false) }) { Text(stringResource(R.string.scan)) } }
@@ -151,7 +155,10 @@ fun AnalyticsScreen(nav: NavHostController, vm: AnalyticsViewModel = hiltViewMod
                     SectionHeader("Duplicate waste")
                     when {
                         waste == null -> TextButton(onClick = vm::computeWaste) { Text("Calculate (hashes candidate files)") }
-                        waste!! < 0 -> Text("Calculating…")
+                        waste!! < 0 -> {
+                            Text("Hashing candidates… ${((wasteP ?: 0f) * 100).toInt()}%", style = MaterialTheme.typography.bodySmall)
+                            androidx.compose.material3.LinearProgressIndicator(progress = { wasteP ?: 0f }, modifier = Modifier.fillMaxWidth().padding(top = 6.dp))
+                        }
                         else -> Text("${Formatters.size(waste!!)} could be reclaimed by removing duplicate copies.", style = MaterialTheme.typography.bodyMedium)
                     }
                 }

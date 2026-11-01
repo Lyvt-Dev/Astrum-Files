@@ -54,6 +54,8 @@ data class ExplorerUi(
     val searchText: String? = null,
     val searchResults: List<FileItem> = emptyList(),
     val searching: Boolean = false,
+    val searchedFolders: Int = 0,
+    val searchTotalFolders: Int = 0,
     val operation: OperationState? = null,
 ) {
     val path: String get() = tabs[activeTab].path
@@ -175,7 +177,12 @@ class ExplorerViewModel @Inject constructor(
             kotlinx.coroutines.delay(350) // debounce typing
             val existing = searchHistory.value.firstOrNull { it.query == text.trim() }
             searches.upsert(com.lyvt.files.core.database.SearchEntity(text.trim(), saved = existing?.saved == true))
-            FileSearch.search(File(_ui.value.path), q, settings.value.scanExclusions).collect { batch ->
+            // Count top-level folders so progress can be shown as "x of y top-level folders done".
+            val top = File(_ui.value.path).listFiles()?.filter { it.isDirectory && (q.includeHidden || !it.name.startsWith(".")) }.orEmpty()
+            _ui.update { it.copy(searchedFolders = 0, searchTotalFolders = top.size) }
+            FileSearch.search(File(_ui.value.path), q, settings.value.scanExclusions, onFolder = { n ->
+                if (n % 25 == 0) _ui.update { it.copy(searchedFolders = n) }
+            }).collect { batch ->
                 _ui.update { it.copy(searchResults = (it.searchResults + batch).take(5000)) }
             }
             _ui.update { it.copy(searching = false) }

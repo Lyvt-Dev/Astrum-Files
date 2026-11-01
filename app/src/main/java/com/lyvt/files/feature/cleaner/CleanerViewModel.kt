@@ -42,6 +42,9 @@ data class CleanerUi(
     val mode: CleanerMode? = null,
     val running: Boolean = false,
     val progress: String = "",
+    /** Fraction of the current analysis phase (comparing / hashing photos); null while walking storage. */
+    val phaseFraction: Float? = null,
+    val phaseTitle: String = "",
     val groups: List<CleanGroup> = emptyList(),
     val selected: Set<String> = emptySet(),
     val apps: List<AppCandidate> = emptyList(),
@@ -88,7 +91,7 @@ class CleanerViewModel @Inject constructor(
         val mode = _ui.value.mode ?: return
         job?.cancel()
         job = viewModelScope.launch(Dispatchers.IO) {
-            _ui.update { it.copy(running = true, progress = "Scanning storage…", groups = emptyList(), selected = emptySet()) }
+            _ui.update { it.copy(running = true, progress = "", phaseFraction = null, phaseTitle = "", groups = emptyList(), selected = emptySet()) }
             try {
                 if (mode == CleanerMode.APPS) { scanApps(); return@launch }
                 val scan = cache.get(force)
@@ -96,7 +99,7 @@ class CleanerViewModel @Inject constructor(
                 val files = scan.allFiles.filterNot { f -> prot.any { f.absolutePath.startsWith(it) } }
                 val groups: List<CleanGroup> = when (mode) {
                     CleanerMode.DUPLICATES -> {
-                        val d = DuplicateFinder.find(files, minSize = 1024) { done, total -> _ui.update { it.copy(progress = "Comparing $done / $total candidates") } }
+                        val d = DuplicateFinder.find(files, minSize = 1024) { done, total -> _ui.update { it.copy(phaseTitle = "Comparing files", progress = "$done of $total candidates hashed", phaseFraction = if (total > 0) done.toFloat() / total else null) } }
                         d.map { g -> CleanGroup("${g.files.size} copies · ${com.lyvt.files.core.common.Formatters.size(g.size)} each", g.files.map { FileItem.from(it) },
                             "SHA-256 ${g.hash.take(12)}…") }.also { gs -> _ui.update { u -> u.copy(selected = DuplicateFinder.defaultSelection(d)) } }
                     }
@@ -104,7 +107,7 @@ class CleanerViewModel @Inject constructor(
                         val imgs = files.filter { FileCategory.of(it.extension) == FileCategory.IMAGE && it.length() > 20_000 }.take(4000)
                         val hashed = imgs.mapIndexedNotNull { i, f ->
                             currentCoroutineContext().ensureActive()
-                            if (i % 20 == 0) _ui.update { it.copy(progress = "Analysing photos $i / ${imgs.size}") }
+                            if (i % 10 == 0) _ui.update { it.copy(phaseTitle = "Analysing photos", progress = "$i of ${imgs.size} photos", phaseFraction = i.toFloat() / imgs.size.coerceAtLeast(1)) }
                             ImageAnalysis.dHash(f)?.let { f to it }
                         }
                         clusterByHash(hashed, _ui.value.similarity).map { g ->
@@ -117,7 +120,7 @@ class CleanerViewModel @Inject constructor(
                         val imgs = files.filter { FileCategory.of(it.extension) == FileCategory.IMAGE && it.length() > 20_000 }.take(3000)
                         val blurry = imgs.mapIndexedNotNull { i, f ->
                             currentCoroutineContext().ensureActive()
-                            if (i % 20 == 0) _ui.update { it.copy(progress = "Measuring sharpness $i / ${imgs.size}") }
+                            if (i % 10 == 0) _ui.update { it.copy(phaseTitle = "Measuring sharpness", progress = "$i of ${imgs.size} photos", phaseFraction = i.toFloat() / imgs.size.coerceAtLeast(1)) }
                             ImageAnalysis.sharpness(f)?.takeIf { it < _ui.value.blurThreshold }?.let { f to it }
                         }.sortedBy { it.second }
                         if (blurry.isEmpty()) emptyList() else listOf(CleanGroup("${blurry.size} possibly blurry photos", blurry.map { FileItem.from(it.first) },
@@ -170,7 +173,7 @@ class CleanerViewModel @Inject constructor(
                     }
                     CleanerMode.APPS -> emptyList()
                 }
-                _ui.update { it.copy(groups = groups, running = false, progress = "",
+                _ui.update { it.copy(groups = groups, running = false, progress = "", phaseFraction = null, phaseTitle = "",
                     lastScanSummary = "Scanned ${scan.fileCount} files" + if (scan.inaccessible > 0) " · ${scan.inaccessible} folders not accessible" else "") }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e

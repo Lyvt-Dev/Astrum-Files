@@ -29,7 +29,7 @@ data class ScanResult(
  * Only reports what the app can actually read; inaccessible directories are counted, not guessed.
  */
 object StorageScanner {
-    suspend fun scan(root: File, exclusions: Set<String> = emptySet(), onProgress: (Int) -> Unit = {}): ScanResult {
+    suspend fun scan(root: File, exclusions: Set<String> = emptySet(), onProgress: (files: Int, bytes: Long) -> Unit = { _, _ -> }): ScanResult {
         val cat = HashMap<FileCategory, LongArray>()
         val ext = HashMap<String, LongArray>()
         val largest = PriorityQueue<File>(compareBy { it.length() })
@@ -61,9 +61,10 @@ object StorageScanner {
                 val rel = c.absolutePath.removePrefix(rootCanon).removePrefix(root.absolutePath).trimStart('/')
                 val top = rel.substringBefore('/', "")
                 if (top.isNotEmpty() && rel.contains('/')) topLevel.getOrPut(top) { LongArray(2) }.let { it[0] += len; it[1]++ }
-                if (files % 500 == 0) onProgress(files)
+                if (files % 200 == 0) onProgress(files, total)
             }
         }
+        onProgress(files, total)
         return ScanResult(
             root = root.absolutePath,
             scannedAt = System.currentTimeMillis(),

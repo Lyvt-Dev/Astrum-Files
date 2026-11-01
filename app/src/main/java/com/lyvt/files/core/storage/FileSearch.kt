@@ -89,7 +89,7 @@ data class SearchQuery(
 
 object FileSearch {
     /** Recursive, cancellable search streaming batches of matches. Skips symlink loops and Android/data. */
-    fun search(root: File, query: SearchQuery, excluded: Set<String> = emptySet(), batch: Int = 50): Flow<List<FileItem>> = flow {
+    fun search(root: File, query: SearchQuery, excluded: Set<String> = emptySet(), batch: Int = 50, onFolder: (Int) -> Unit = {}): Flow<List<FileItem>> = flow {
         val buffer = ArrayList<FileItem>(batch)
         val visited = HashSet<String>()
         val stack = ArrayDeque<File>().apply { add(root) }
@@ -99,6 +99,7 @@ object FileSearch {
             val canon = runCatching { dir.canonicalPath }.getOrNull() ?: continue
             if (!visited.add(canon) || excluded.any { canon.startsWith(it) }) continue
             val children = dir.listFiles() ?: continue
+            onFolder(visited.size)
             for (c in children) {
                 if (c.isDirectory && (query.includeHidden || !c.name.startsWith("."))) stack.add(c)
                 if (query.matches(c)) {

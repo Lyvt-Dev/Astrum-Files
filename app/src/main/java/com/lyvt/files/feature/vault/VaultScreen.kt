@@ -110,6 +110,7 @@ private fun promptBiometric(activity: FragmentActivity, cipher: Cipher, title: S
 fun VaultScreen(nav: NavHostController, vm: VaultViewModel = hiltViewModel()) {
     val state by vm.state.collectAsStateWithLifecycle()
     val busy by vm.busy.collectAsStateWithLifecycle()
+    val busyFraction by vm.busyFraction.collectAsStateWithLifecycle()
     val recovery by vm.recoveryCode.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     LaunchedEffect(Unit) { vm.messages.collect { snackbar.showSnackbar(it) } }
@@ -121,7 +122,9 @@ fun VaultScreen(nav: NavHostController, vm: VaultViewModel = hiltViewModel()) {
                 VaultState.Locked -> LockedView(vm)
                 is VaultState.Unlocked -> UnlockedView(nav, vm, s, snackbar)
             }
-            busy?.let { Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background.copy(alpha = 0.85f)), contentAlignment = Alignment.Center) { LoadingState(it) } }
+            busy?.let { Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background.copy(alpha = 0.85f)), contentAlignment = Alignment.Center) {
+                if (busyFraction != null) com.lyvt.files.ui.ScanProgressCard("Encrypting", it, busyFraction, modifier = Modifier.padding(24.dp)) else LoadingState(it)
+            } }
         }
     }
     recovery?.let { code ->

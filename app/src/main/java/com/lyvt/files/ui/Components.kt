@@ -297,3 +297,26 @@ fun Pill(text: String, selected: Boolean, onClick: () -> Unit) {
         contentColor = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
     ) { Text(text, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)) }
 }
+
+/**
+ * Scan progress with a determinate bar when a total is known (or estimated), otherwise an indeterminate bar.
+ * [estimated] marks percentages derived from an estimate so the UI says "about".
+ */
+@Composable
+fun ScanProgressCard(title: String, detail: String, fraction: Float?, estimated: Boolean = false, modifier: Modifier = Modifier, onCancel: (() -> Unit)? = null) {
+    val animated by androidx.compose.animation.core.animateFloatAsState(fraction ?: 0f, androidx.compose.animation.core.tween(300), label = "scan")
+    LyvtCard(modifier.padding(horizontal = 0.dp), padding = 16.dp) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.titleSmall)
+                Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
+            }
+            if (fraction != null) Text((if (estimated && fraction < 1f) "≈" else "") + "${(fraction * 100).toInt()}%", style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.primary)
+            onCancel?.let { TextButton(onClick = it) { Text(androidx.compose.ui.res.stringResource(com.lyvt.files.R.string.cancel)) } }
+        }
+        Spacer(Modifier.height(10.dp))
+        if (fraction == null) androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth().height(6.dp).clip(CircleShape), strokeCap = StrokeCap.Round)
+        else androidx.compose.material3.LinearProgressIndicator(progress = { animated }, modifier = Modifier.fillMaxWidth().height(6.dp).clip(CircleShape), strokeCap = StrokeCap.Round)
+    }
+}

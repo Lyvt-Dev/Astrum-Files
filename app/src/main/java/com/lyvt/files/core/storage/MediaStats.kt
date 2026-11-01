@@ -13,6 +13,14 @@ data class CategoryStat(val category: FileCategory, val bytes: Long, val count: 
 /** Fast per-category totals from the MediaStore index (covers files indexed by the system). */
 @Singleton
 class MediaStats @Inject constructor(@ApplicationContext private val context: Context) {
+    /** Number of files the system index knows about; used only as an estimate for scan progress. */
+    suspend fun indexedFileCount(): Int = withContext(Dispatchers.IO) {
+        runCatching {
+            context.contentResolver.query(MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL), arrayOf(MediaStore.Files.FileColumns._ID),
+                "${MediaStore.Files.FileColumns.SIZE} > 0", null, null)?.use { it.count }
+        }.getOrNull() ?: 0
+    }
+
     suspend fun categories(): List<CategoryStat> = withContext(Dispatchers.IO) {
         val acc = HashMap<FileCategory, LongArray>()
         runCatching {

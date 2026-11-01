@@ -148,7 +148,13 @@ fun CleanerScreen(nav: NavHostController, vm: CleanerViewModel = hiltViewModel()
                     Text(stringResource(R.string.heuristic_note), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp))
                 }
-                if (ui.running) item { LoadingState(stringResource(R.string.scanning), ui.progress.ifEmpty { "$scanned files indexed" }) }
+                if (ui.running) item {
+                    Column(Modifier.padding(horizontal = 18.dp, vertical = 8.dp)) {
+                        if (ui.phaseTitle.isEmpty()) com.lyvt.files.ui.ScanProgressCard(stringResource(R.string.scanning),
+                            "${scanned.files} files · ${Formatters.size(scanned.bytes)} checked", scanned.fraction, estimated = true, onCancel = vm::cancel)
+                        else com.lyvt.files.ui.ScanProgressCard(ui.phaseTitle, ui.progress, ui.phaseFraction, onCancel = vm::cancel)
+                    }
+                }
                 else if (ui.progress.isNotEmpty()) item { Text(ui.progress, Modifier.padding(20.dp), color = MaterialTheme.colorScheme.error) }
                 else if (mode == CleanerMode.APPS) {
                     if (ui.appsPermissionMissing) item {

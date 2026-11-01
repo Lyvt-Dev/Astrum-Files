@@ -135,7 +135,7 @@ fun ExplorerPane(nav: NavHostController, vm: ExplorerViewModel, handleBack: Bool
         topBar = {
             Column(Modifier.statusBarsPadding()) {
                 if (ui.selection.isNotEmpty()) SelectionBar(ui.selection.size, vm, onMore = { dialog = ExplorerDialog.SelectionMenu })
-                else if (ui.searchText != null) SearchBar(ui.searchText!!, ui.searching, ui.searchResults.size, vm, vm::search, vm::closeSearch)
+                else if (ui.searchText != null) SearchBar(ui.searchText!!, ui.searching, ui.searchResults.size, ui.searchedFolders, vm, vm::search, vm::closeSearch)
                 else BrowseBar(ui, settings.gridView, settings.showHidden, vm, onSort = { dialog = ExplorerDialog.Sort }, nav = nav, onSortFolders = { dialog = ExplorerDialog.SortIntoFolders })
                 if (ui.tabs.size > 1) TabsRow(ui, vm)
                 if (ui.searchText == null) Breadcrumbs(ui.path, vm.rootPath, vm::open)
@@ -270,7 +270,7 @@ private fun SelectionBar(count: Int, vm: ExplorerViewModel, onMore: () -> Unit) 
 }
 
 @Composable
-private fun SearchBar(text: String, searching: Boolean, count: Int, vm: ExplorerViewModel, onSearch: (String) -> Unit, onClose: () -> Unit) {
+private fun SearchBar(text: String, searching: Boolean, count: Int, folders: Int, vm: ExplorerViewModel, onSearch: (String) -> Unit, onClose: () -> Unit) {
     var value by remember { mutableStateOf(text) }
     val history by vm.searchHistory.collectAsStateWithLifecycle()
     Column(Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
@@ -281,7 +281,7 @@ private fun SearchBar(text: String, searching: Boolean, count: Int, vm: Explorer
             trailingIcon = { if (value.isNotEmpty()) IconButton(onClick = { value = ""; onSearch("") }) { Icon(Icons.Filled.Close, null) } },
             shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth(),
         )
-        Text(if (searching) "Searching… $count found" else if (value.isNotBlank()) "$count result(s)" else "Searches this folder and all subfolders",
+        Text(if (searching) "Searching… $folders folders checked · $count found" else if (value.isNotBlank()) "$count result(s)" else "Searches this folder and all subfolders",
             style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 8.dp, top = 4.dp))
         if (searching) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 4.dp))
         if (value.isBlank() && history.isNotEmpty()) Row(Modifier.horizontalScroll(rememberScrollState()).padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {

@@ -32,6 +32,7 @@ class AnalyticsViewModel @Inject constructor(
     val progress = cache.progress
     val volume = MutableStateFlow<StorageVolumeInfo?>(null)
     val duplicateWaste = MutableStateFlow<Long?>(null)
+    val wasteProgress = MutableStateFlow<Float?>(null)
     val history: StateFlow<List<StorageSnapshotEntity>> = volume.flatMapLatest { v -> v?.let { snapshots.observe(it.id) } ?: flowOf(emptyList()) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -47,6 +48,8 @@ class AnalyticsViewModel @Inject constructor(
     fun computeWaste() = viewModelScope.launch(Dispatchers.IO) {
         val s = cache.get()
         duplicateWaste.value = -1
-        duplicateWaste.value = DuplicateFinder.find(s.allFiles, 1024).sumOf { it.wasted }
+        wasteProgress.value = 0f
+        duplicateWaste.value = DuplicateFinder.find(s.allFiles, 1024) { d, t -> wasteProgress.value = if (t > 0) d.toFloat() / t else null }.sumOf { it.wasted }
+        wasteProgress.value = null
     }
 }
