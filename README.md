@@ -1,4 +1,4 @@
-# Astrum Files – Datei Manager
+# Astrum Files
 
 A privacy-first, offline Android file manager built with Kotlin and Jetpack Compose. It covers the usual
 file-management features plus a storage cleaner, storage analytics, an encrypted vault, an archive manager, a trash,
