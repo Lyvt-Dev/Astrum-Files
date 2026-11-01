@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -74,9 +75,9 @@ fun main() {
     System.getProperty("astrum.screen")?.let { runCatching { AppState.screen = Screen.valueOf(it.uppercase()) } }
     val skipIntro = System.getProperty("astrum.nointro") != null
     application {
-        val state = rememberWindowState(size = DpSize(1360.dp, 860.dp))
+        val state = rememberWindowState(size = DpSize(1480.dp, 920.dp))
         Window(onCloseRequest = { Transfer.stop(); Transfer.nearby.stop(); Vault.lock(); AppState.save(); exitApplication() }, state = state, title = "Astrum Files", icon = painterResource("astrum.png")) {
-            window.minimumSize = java.awt.Dimension(980, 640)
+            window.minimumSize = java.awt.Dimension(1100, 700)
             // Vault auto-lock after 5 minutes without activity or when the window is minimised for 1 minute.
             LaunchedEffect(Unit) { while (true) { delay(15_000)
                 if (Vault.unlocked && (System.currentTimeMillis() - Vault.lastActivity > 5 * 60_000 || (state.isMinimized && System.currentTimeMillis() - Vault.lastActivity > 60_000))) Vault.lock() } }
@@ -96,19 +97,13 @@ private fun App() {
     val scope = rememberCoroutineScope()
     val explorer = remember { ExplorerState(scope, AppState.home.absolutePath) }
     LaunchedEffect(AppState.screen) { if (AppState.screen == Screen.VAULT) Vault.lastActivity = System.currentTimeMillis() }
+    val dark = MaterialTheme.colorScheme.background.red < 0.5f
     Row(Modifier.fillMaxSize()) {
-        NavigationRail(containerColor = MaterialTheme.colorScheme.surfaceContainerLow, header = {
-            Image(painterResource("astrum.png"), "Astrum Files", Modifier.padding(vertical = 14.dp).size(40.dp).clip(RoundedCornerShape(11.dp))) }) {
-            listOf(Screen.HOME to Icons.Filled.Home, Screen.FILES to Icons.Filled.Folder, Screen.CLEANER to Icons.Filled.AutoAwesome, Screen.ANALYTICS to Icons.Filled.Analytics,
-                Screen.VAULT to Icons.Filled.Lock, Screen.TRANSFER to Icons.Filled.WifiTethering, Screen.ORGANIZER to Icons.Filled.AutoFixHigh).forEach { (s, ic) ->
-                NavigationRailItem(selected = AppState.screen == s && AppState.openFile == null, onClick = { AppState.openFile = null; AppState.screen = s }, icon = { Icon(ic, null) }, label = { Text(s.title) })
-            }
-            Spacer(Modifier.weight(1f))
-            NavigationRailItem(selected = AppState.screen == Screen.SETTINGS, onClick = { AppState.openFile = null; AppState.screen = Screen.SETTINGS }, icon = { Icon(Icons.Filled.Settings, null) }, label = { Text("Settings") })
-            Spacer(Modifier.height(12.dp))
-        }
+        Sidebar()
         VerticalDivider()
-        Box(Modifier.weight(1f).fillMaxHeight()) {
+        Column(Modifier.weight(1f).fillMaxHeight()) {
+          TopBar(dark)
+          Box(Modifier.weight(1f).fillMaxWidth()) {
             val f = AppState.openFile
             if (f != null) ViewerHost(f) { AppState.openFile = null }
             else AnimatedContent(AppState.screen, transitionSpec = { fadeIn(tween(if (AppState.reduceMotion) 0 else 180)) togetherWith fadeOut(tween(if (AppState.reduceMotion) 0 else 120)) }) { s ->
@@ -117,6 +112,7 @@ private fun App() {
                     Screen.VAULT -> VaultScreen(); Screen.TRANSFER -> TransferScreen(); Screen.ORGANIZER -> OrganizerScreen(); Screen.SETTINGS -> SettingsScreen()
                 }
             }
+          }
         }
     }
 }

@@ -1,8 +1,11 @@
 package com.lyvt.files.core.scan
 
 import com.lyvt.files.core.storage.Hashing
-import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import java.util.concurrent.atomic.AtomicInteger
 import java.io.File
 
 data class DuplicateGroup(val hash: String, val size: Long, val files: List<File>) {
@@ -15,23 +18,27 @@ data class DuplicateGroup(val hash: String, val size: Long, val files: List<File
  * SHA-256, (4) byte-for-byte equality is implied by a full SHA-256 collision-resistant match.
  */
 object DuplicateFinder {
-    suspend fun find(files: List<File>, minSize: Long = 1, onProgress: (Int, Int) -> Unit = { _, _ -> }): List<DuplicateGroup> {
+    /** Parallel hashing (several files at once) — disks/SSDs are much faster with a few reads in flight. */
+    suspend fun find(files: List<File>, minSize: Long = 1, parallelism: Int = 4, onProgress: (Int, Int) -> Unit = { _, _ -> }): List<DuplicateGroup> = coroutineScope {
         val bySize = files.asSequence().filter { it.isFile && it.length() >= minSize }.groupBy { it.length() }.filterValues { it.size > 1 }
         val candidates = bySize.values.sumOf { it.size }
-        var processed = 0
-        val result = mutableListOf<DuplicateGroup>()
-        for ((size, group) in bySize) {
-            currentCoroutineContext().ensureActive()
-            val byPartial = group.groupBy { runCatching { Hashing.partial(it) }.getOrNull() }.filterKeys { it != null }.values.filter { it.size > 1 }
-            for (pg in byPartial) {
-                val byFull = if (size <= 16 * 1024) mapOf(Hashing.partial(pg[0]) to pg)
-                else pg.groupBy { runCatching { Hashing.sha256(it) }.getOrNull() }.filterKeys { it != null }.mapKeys { it.key!! }
-                byFull.filterValues { it.size > 1 }.forEach { (h, fs) -> result += DuplicateGroup(h, size, fs.sortedBy { it.lastModified() }) }
+        val processed = AtomicInteger(0)
+        val io = Dispatchers.IO.limitedParallelism(parallelism)
+        suspend fun hashAll(fs: List<File>, h: suspend (File) -> String): Map<String, List<File>> =
+            fs.map { f -> async(io) { runCatching { h(f) }.getOrNull()?.let { it to f } } }.awaitAll().filterNotNull().groupBy({ it.first }, { it.second })
+        val groups = bySize.entries.map { (size, group) ->
+            async {
+                val byPartial = hashAll(group) { Hashing.partial(it) }.filterValues { it.size > 1 }
+                val out = ArrayList<DuplicateGroup>()
+                for ((ph, pg) in byPartial) {
+                    val byFull = if (size <= 16 * 1024) mapOf(ph to pg) else hashAll(pg) { Hashing.sha256(it) }
+                    byFull.filterValues { it.size > 1 }.forEach { (h, fs) -> out += DuplicateGroup(h, size, fs.sortedBy { it.lastModified() }) }
+                }
+                onProgress(processed.addAndGet(group.size), candidates)
+                out
             }
-            processed += group.size
-            onProgress(processed, candidates)
-        }
-        return result.sortedByDescending { it.wasted }
+        }.awaitAll().flatten()
+        groups.sortedByDescending { it.wasted }
     }
 
     /** Selection that keeps the oldest copy of each group — never selects every copy. */

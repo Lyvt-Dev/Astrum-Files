@@ -183,10 +183,24 @@ object Thumbs {
     private val cache = Collections.synchronizedMap(object : LinkedHashMap<String, ImageBitmap>(256, 0.75f, true) {
         override fun removeEldestEntry(e: MutableMap.MutableEntry<String, ImageBitmap>?) = size > 300
     })
-    suspend fun load(f: File, max: Int = 160): ImageBitmap? = cache[f.path + max] ?: withContext(Dispatchers.IO) {
+    private val decoder = Dispatchers.IO.limitedParallelism(maxOf(2, Runtime.getRuntime().availableProcessors() / 2))
+
+    /** Decodes only every n-th pixel (source subsampling) — a 24 MP photo is read ~50× faster than a full decode. */
+    fun decodeSmall(f: File, max: Int): java.awt.image.BufferedImage? = ImageIO.createImageInputStream(f)?.use { iis ->
+        val r = ImageIO.getImageReaders(iis).asSequence().firstOrNull() ?: return null
+        try {
+            r.setInput(iis, true, true)
+            val w = r.getWidth(0); val h = r.getHeight(0)
+            val step = maxOf(1, minOf(w, h) / (max * 2))
+            val p = r.defaultReadParam.apply { setSourceSubsampling(step, step, 0, 0) }
+            r.read(0, p)
+        } finally { r.dispose() }
+    }
+
+    suspend fun load(f: File, max: Int = 160): ImageBitmap? = cache[f.path + max] ?: withContext(decoder) {
         runCatching {
             if (f.length() > 60L * 1024 * 1024) return@runCatching null
-            val img = ImageIO.read(f) ?: return@runCatching null
+            val img = decodeSmall(f, max) ?: return@runCatching null
             val k = max.toDouble() / maxOf(img.width, img.height)
             val out = if (k >= 1) img else java.awt.image.BufferedImage((img.width * k).toInt().coerceAtLeast(1), (img.height * k).toInt().coerceAtLeast(1), java.awt.image.BufferedImage.TYPE_INT_ARGB).also {
                 val g = it.createGraphics(); g.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION, java.awt.RenderingHints.VALUE_INTERPOLATION_BILINEAR)

@@ -45,12 +45,12 @@ class FileRepository @Inject constructor(
     suspend fun list(path: String, showHidden: Boolean, sort: SortOrder): ListResult = withContext(Dispatchers.IO) {
         val dir = File(path)
         if (!dir.exists()) return@withContext ListResult.NotFound
-        val children = dir.listFiles() ?: return@withContext ListResult.AccessDenied
+        val children = FastFs.list(dir) ?: return@withContext ListResult.AccessDenied
         ListResult.Ok(
             children.asSequence()
-                .filter { showHidden || !it.name.startsWith(".") }
-                .filterNot { it.name.endsWith(FileOperations.PART_SUFFIX) }
-                .map { FileItem.from(it, countChildren = true) }
+                .filter { showHidden || !it.file.name.startsWith(".") }
+                .filterNot { it.file.name.endsWith(FileOperations.PART_SUFFIX) }
+                .map { e -> e.toItem().let { if (e.isDirectory) it.copy(childCount = e.file.list()?.size ?: 0) else it } }
                 .sortedWith(sort.comparator())
                 .toList()
         )

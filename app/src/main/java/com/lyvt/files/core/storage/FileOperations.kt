@@ -16,7 +16,6 @@ data class TransferProgress(val bytesDone: Long, val bytesTotal: Long, val curre
  * transfer never leaves a truncated file under the real name; restarting simply redoes that file.
  */
 object FileOperations {
-    private const val BUFFER = 256 * 1024
     const val PART_SUFFIX = ".lyvtpart"
 
     private val illegal = Regex("[\\\\/:*?\"<>|\\u0000]")
@@ -41,7 +40,19 @@ object FileOperations {
         return candidate
     }
 
-    fun totalSize(f: File): Long = if (f.isDirectory) f.walkTopDown().filter { it.isFile }.sumOf { it.length() } else f.length()
+    private const val CHUNK = 8L * 1024 * 1024
+
+    fun totalSize(f: File): Long {
+        if (!f.isDirectory) return f.length()
+        var total = 0L
+        runCatching {
+            java.nio.file.Files.walkFileTree(f.toPath(), object : java.nio.file.SimpleFileVisitor<java.nio.file.Path>() {
+                override fun visitFile(p: java.nio.file.Path, a: java.nio.file.attribute.BasicFileAttributes): java.nio.file.FileVisitResult { total += a.size(); return java.nio.file.FileVisitResult.CONTINUE }
+                override fun visitFileFailed(p: java.nio.file.Path, e: java.io.IOException) = java.nio.file.FileVisitResult.CONTINUE
+            })
+        }
+        return total
+    }
 
     fun countItems(f: File): Int = if (f.isDirectory) f.walkTopDown().count() else 1
 
@@ -107,6 +118,7 @@ object FileOperations {
         if (!move && destDir.usableSpace in 1 until total) return OpResult.Failure("Not enough free space at destination")
         var done = 0L
         var count = 0
+        var lastUi = 0L
         val failed = mutableListOf<Pair<String, String>>()
         for (src in sources) {
             currentCoroutineContext().ensureActive()
@@ -127,7 +139,9 @@ object FileOperations {
                 if (move && src.renameTo(target)) {
                     done += totalSize(target)
                 } else {
-                    copyRecursive(src, target) { n -> done += n; onProgress(TransferProgress(done, total, src.name, count, sources.size)) }
+                    copyRecursive(src, target) { n -> done += n
+                        val now = System.nanoTime()
+                        if (now - lastUi > 80_000_000) { lastUi = now; onProgress(TransferProgress(done, total, src.name, count, sources.size)) } }
                     if (move && !src.deleteRecursively()) throw IOException("Copied, but the original could not be removed")
                 }
                 count++
@@ -151,17 +165,20 @@ object FileOperations {
         }
         val part = File(target.parentFile, target.name + PART_SUFFIX)
         try {
-            src.inputStream().use { input ->
-                part.outputStream().use { out ->
-                    val buf = ByteArray(BUFFER)
-                    while (true) {
+            // FileChannel.transferTo lets the OS copy in kernel space (much faster than a read/write loop).
+            // No fsync per file: that made copying many small files extremely slow; the .part + rename still
+            // guarantees that an interrupted copy never leaves a half-written file under the real name.
+            java.io.FileInputStream(src).channel.use { input ->
+                java.io.FileOutputStream(part).channel.use { out ->
+                    val size = input.size()
+                    var pos = 0L
+                    while (pos < size) {
                         currentCoroutineContext().ensureActive()
-                        val n = input.read(buf)
-                        if (n < 0) break
-                        out.write(buf, 0, n)
-                        onBytes(n.toLong())
+                        val n = input.transferTo(pos, minOf(CHUNK, size - pos), out)
+                        if (n <= 0) throw IOException("${src.name} changed while copying")
+                        pos += n
+                        onBytes(n)
                     }
-                    out.fd.sync()
                 }
             }
             if (!part.renameTo(target)) throw IOException("Could not finalize ${target.name}")

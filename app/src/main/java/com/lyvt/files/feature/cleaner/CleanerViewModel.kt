@@ -113,9 +113,7 @@ class CleanerViewModel @Inject constructor(
                     }
                     CleanerMode.SIMILAR -> {
                         val imgs = files.filter { FileCategory.of(it.extension) == FileCategory.IMAGE && it.length() > 20_000 }.take(4000)
-                        val hashed = imgs.mapIndexedNotNull { i, f ->
-                            currentCoroutineContext().ensureActive()
-                            if (i % 10 == 0) _ui.update { it.copy(phaseTitle = "Analysing photos", progress = "$i of ${imgs.size} photos", phaseFraction = i.toFloat() / imgs.size.coerceAtLeast(1)) }
+                        val hashed = com.lyvt.files.core.common.parMap(imgs, { i -> _ui.update { it.copy(phaseTitle = "Analysing photos", progress = "$i of ${imgs.size} photos", phaseFraction = i.toFloat() / imgs.size.coerceAtLeast(1)) } }) { f ->
                             ImageAnalysis.dHash(f)?.let { f to it }
                         }
                         clusterByHash(hashed, _ui.value.similarity).map { g ->
@@ -126,10 +124,9 @@ class CleanerViewModel @Inject constructor(
                     }
                     CleanerMode.BLURRY -> {
                         val imgs = files.filter { FileCategory.of(it.extension) == FileCategory.IMAGE && it.length() > 20_000 }.take(3000)
-                        val blurry = imgs.mapIndexedNotNull { i, f ->
-                            currentCoroutineContext().ensureActive()
-                            if (i % 10 == 0) _ui.update { it.copy(phaseTitle = "Measuring sharpness", progress = "$i of ${imgs.size} photos", phaseFraction = i.toFloat() / imgs.size.coerceAtLeast(1)) }
-                            ImageAnalysis.sharpness(f)?.takeIf { it < _ui.value.blurThreshold }?.let { f to it }
+                        val threshold = _ui.value.blurThreshold
+                        val blurry = com.lyvt.files.core.common.parMap(imgs, { i -> _ui.update { it.copy(phaseTitle = "Measuring sharpness", progress = "$i of ${imgs.size} photos", phaseFraction = i.toFloat() / imgs.size.coerceAtLeast(1)) } }) { f ->
+                            ImageAnalysis.sharpness(f)?.takeIf { it < threshold }?.let { f to it }
                         }.sortedBy { it.second }
                         if (blurry.isEmpty()) emptyList() else listOf(CleanGroup("${blurry.size} possibly blurry photos", blurry.map { FileItem.from(it.first) },
                             "Estimated with Laplacian variance — artistic shots or low-detail scenes may appear here"))

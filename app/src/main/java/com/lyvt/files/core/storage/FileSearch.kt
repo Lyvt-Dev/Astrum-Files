@@ -96,14 +96,15 @@ object FileSearch {
         while (stack.isNotEmpty()) {
             currentCoroutineContext().ensureActive()
             val dir = stack.removeLast()
-            val canon = runCatching { dir.canonicalPath }.getOrNull() ?: continue
+            val canon = if (java.nio.file.Files.isSymbolicLink(dir.toPath())) runCatching { dir.canonicalPath }.getOrNull() ?: continue else dir.absolutePath
             if (!visited.add(canon) || excluded.any { canon.startsWith(it) }) continue
-            val children = dir.listFiles() ?: continue
+            val children = FastFs.list(dir) ?: continue
             onFolder(visited.size)
-            for (c in children) {
-                if (c.isDirectory && (query.includeHidden || !c.name.startsWith("."))) stack.add(c)
+            for (e in children) {
+                val c = e.file
+                if (e.isDirectory && (query.includeHidden || !c.name.startsWith("."))) stack.add(c)
                 if (query.matches(c)) {
-                    buffer += FileItem.from(c)
+                    buffer += e.toItem()
                     if (buffer.size >= batch) { emit(buffer.toList()); buffer.clear() }
                 }
             }

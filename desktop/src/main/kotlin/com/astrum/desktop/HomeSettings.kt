@@ -50,46 +50,6 @@ import com.lyvt.files.core.common.Formatters
 import com.lyvt.files.core.storage.FileItem
 import java.io.File
 
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-fun HomeScreen() {
-    LazyColumn(Modifier.fillMaxSize().background(Brush.verticalGradient(0f to MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f), 0.3f to MaterialTheme.colorScheme.background)),
-        contentPadding = PaddingValues(28.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
-        item { Row(verticalAlignment = Alignment.CenterVertically) {
-            Image(painterResource("astrum.png"), null, Modifier.size(52.dp).clip(RoundedCornerShape(14.dp))); Spacer(Modifier.width(14.dp))
-            Column { Text("Astrum Files", style = MaterialTheme.typography.headlineMedium); Text("Your files, in orbit.", color = MaterialTheme.colorScheme.onSurfaceVariant) }
-        } }
-        item { FlowRow(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            File.listRoots().filter { it.totalSpace > 0 }.forEach { r -> val f = (r.totalSpace - r.usableSpace).toFloat() / r.totalSpace
-                AstrumCard(Modifier.width(300.dp), onClick = { AppState.openInExplorer(r.absolutePath) }) { Row(verticalAlignment = Alignment.CenterVertically) {
-                    Donut(listOf(f to MaterialTheme.colorScheme.primary), Modifier.size(90.dp), 12.dp) { Text("${(f * 100).toInt()}%", style = MaterialTheme.typography.titleMedium) }
-                    Spacer(Modifier.width(16.dp)); Column { Text("Drive ${r.path}", style = MaterialTheme.typography.titleMedium)
-                        Text("${Formatters.size(r.totalSpace - r.usableSpace)} of ${Formatters.size(r.totalSpace)}", style = MaterialTheme.typography.bodyMedium)
-                        Text("${Formatters.size(r.usableSpace)} free", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) } } } } } }
-        item { SectionHeader("Quick access") }
-        item { FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            listOf(Triple("Desktop", Icons.Filled.DesktopWindows, "Desktop"), Triple("Downloads", Icons.Filled.Download, "Downloads"), Triple("Documents", Icons.Filled.Description, "Documents"),
-                Triple("Pictures", Icons.Filled.Image, "Pictures"), Triple("Music", Icons.Filled.MusicNote, "Music"), Triple("Videos", Icons.Filled.Movie, "Videos")).filter { AppState.knownFolder(it.third).exists() }.forEachIndexed { i, (n, ic, d) ->
-                Tile(n, ic, Accents[i % Accents.size]) { AppState.openInExplorer(AppState.knownFolder(d).absolutePath) } }
-            Tile("Send to phone", Icons.Filled.PhoneAndroid, Accents[0]) { AppState.screen = Screen.TRANSFER }
-            Tile("Cleaner", Icons.Filled.AutoAwesome, Accents[3]) { AppState.screen = Screen.CLEANER }
-            Tile("Organizer", Icons.Filled.AutoFixHigh, Gold) { AppState.screen = Screen.ORGANIZER }
-            Tile("Vault", Icons.Filled.Lock, Accents[2]) { AppState.screen = Screen.VAULT }
-        } }
-        if (AppState.recents.isNotEmpty()) { item { SectionHeader("Recent files") }
-            item { FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                AppState.recents.filter { File(it).exists() }.take(12).forEach { p -> val f = FileItem.from(File(p))
-                    AstrumCard(Modifier.width(150.dp), padding = 10.dp, onClick = { AppState.open(File(p)) }) { FileThumb(f, 130.dp); Spacer(Modifier.height(6.dp))
-                        Text(f.name, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.MiddleEllipsis) } } } } }
-        if (AppState.favorites.isNotEmpty()) { item { SectionHeader("Favorites") }
-            items(AppState.favorites.toList()) { p -> Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable { if (File(p).isDirectory) AppState.openInExplorer(p) else AppState.open(File(p)) }.padding(8.dp)) {
-                Text("★  ", color = Gold); Text(p, style = MaterialTheme.typography.bodyMedium) } } }
-    }
-}
-
-@Composable private fun Tile(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, tint: Color, onClick: () -> Unit) =
-    AstrumCard(Modifier.width(150.dp), padding = 14.dp, onClick = onClick) { IconBadge(icon, tint, 42.dp); Spacer(Modifier.height(10.dp)); Text(label, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) }
-
 @Composable
 fun SettingsScreen() {
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(28.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -118,7 +78,7 @@ fun SettingsScreen() {
                 style = MaterialTheme.typography.bodySmall)
             TextButton(onClick = { runCatching { java.awt.Desktop.getDesktop().open(Store.dir) } }) { Text("Open data folder") } } }
         item { AstrumCard { Row(verticalAlignment = Alignment.CenterVertically) { Image(painterResource("astrum.png"), null, Modifier.size(40.dp).clip(RoundedCornerShape(10.dp))); Spacer(Modifier.width(12.dp))
-            Column { Text("Astrum Files for Windows", style = MaterialTheme.typography.titleMedium); Text("Version 1.0.0 · Java ${System.getProperty("java.version")}", style = MaterialTheme.typography.labelSmall) } } } }
+            Column { Text("Astrum Files for Windows", style = MaterialTheme.typography.titleMedium); Text("Version 1.2.0 · Java ${System.getProperty("java.version")}", style = MaterialTheme.typography.labelSmall) } } } }
     }
 }
 

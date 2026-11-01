@@ -1,10 +1,18 @@
 package com.lyvt.files.core.scan
 
+import com.lyvt.files.core.storage.FastFs
 import com.lyvt.files.core.storage.FileCategory
 import com.lyvt.files.core.storage.FileItem
+import com.lyvt.files.core.storage.ScannedFile
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.ensureActive
 import java.io.File
+import java.io.IOException
+import java.nio.file.FileVisitResult
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.SimpleFileVisitor
+import java.nio.file.attribute.BasicFileAttributes
 import java.util.PriorityQueue
 
 data class FolderStat(val path: String, val name: String, val size: Long, val files: Int)
@@ -20,50 +28,72 @@ data class ScanResult(
     val largestFiles: List<FileItem>,
     val topFolders: List<FolderStat>,
     val emptyFolders: List<String>,
+    /** Files with size/date cached from the scan ([ScannedFile]) — no extra disk access when sorting/filtering. */
     val allFiles: List<File>,
     val inaccessible: Int,
 )
 
 /**
- * Single-pass walk of an accessible root collecting everything analytics and cleaner need.
- * Only reports what the app can actually read; inaccessible directories are counted, not guessed.
+ * Single-pass walk (java.nio walkFileTree: one attribute read per entry, symlinks not followed so no loops)
+ * collecting everything analytics and cleaner need. Inaccessible directories are counted, not guessed.
  */
 object StorageScanner {
     suspend fun scan(root: File, exclusions: Set<String> = emptySet(), onProgress: (files: Int, bytes: Long) -> Unit = { _, _ -> }): ScanResult {
+        val job = currentCoroutineContext()[Job]
         val cat = HashMap<FileCategory, LongArray>()
         val ext = HashMap<String, LongArray>()
-        val largest = PriorityQueue<File>(compareBy { it.length() })
+        val largest = PriorityQueue<ScannedFile>(compareBy { it.length() })
         val topLevel = HashMap<String, LongArray>()
         val empty = mutableListOf<String>()
-        val all = ArrayList<File>()
+        val all = ArrayList<File>(1 shl 14)
         var total = 0L; var files = 0; var folders = 0; var denied = 0
-        val rootCanon = root.canonicalPath
-        val visited = HashSet<String>()
-        val stack = ArrayDeque<File>().apply { add(root) }
-        while (stack.isNotEmpty()) {
-            currentCoroutineContext().ensureActive()
-            val dir = stack.removeLast()
-            val canon = runCatching { dir.canonicalPath }.getOrNull() ?: continue
-            if (!visited.add(canon) || exclusions.any { canon.startsWith(it) }) continue
-            val children = dir.listFiles()
-            if (children == null) { denied++; continue }
-            folders++
-            if (children.isEmpty() && dir != root) empty += dir.absolutePath
-            for (c in children) {
-                if (c.isDirectory) { stack.add(c); continue }
-                val len = c.length()
+        val rootPath = root.toPath()
+        val childCounts = ArrayDeque<IntArray>()
+        var top: String? = null
+        var lastReport = 0L
+
+        Files.walkFileTree(rootPath, object : SimpleFileVisitor<Path>() {
+            override fun preVisitDirectory(dir: Path, attrs: BasicFileAttributes): FileVisitResult {
+                if (job?.isActive == false) return FileVisitResult.TERMINATE
+                val s = dir.toString()
+                if (dir != rootPath && exclusions.any { s.startsWith(it) }) return FileVisitResult.SKIP_SUBTREE
+                childCounts.lastOrNull()?.let { it[0]++ }
+                childCounts.addLast(IntArray(1)); folders++
+                if (childCounts.size == 2) top = dir.fileName?.toString()
+                return FileVisitResult.CONTINUE
+            }
+            override fun postVisitDirectory(dir: Path, exc: IOException?): FileVisitResult {
+                val c = childCounts.removeLastOrNull()
+                if (exc != null) denied++ else if (c != null && c[0] == 0 && dir != rootPath) empty += dir.toString()
+                if (childCounts.size == 1) top = null
+                return FileVisitResult.CONTINUE
+            }
+            override fun visitFileFailed(file: Path, exc: IOException): FileVisitResult {
+                if (file != rootPath) { denied++; childCounts.lastOrNull()?.let { it[0]++ } }
+                return FileVisitResult.CONTINUE
+            }
+            override fun visitFile(file: Path, attrs: BasicFileAttributes): FileVisitResult {
+                childCounts.lastOrNull()?.let { it[0]++ }
+                if (!attrs.isRegularFile) return FileVisitResult.CONTINUE
+                val len = attrs.size()
+                val f = ScannedFile(file.toString(), len, attrs.lastModifiedTime().toMillis())
                 total += len; files++
-                all += c
-                val e = c.extension.lowercase()
+                all += f
+                val name = f.name
+                val e = name.substringAfterLast('.', "").lowercase()
                 cat.getOrPut(FileCategory.of(e)) { LongArray(2) }.let { it[0] += len; it[1]++ }
                 ext.getOrPut(e.ifEmpty { "(none)" }) { LongArray(2) }.let { it[0] += len; it[1]++ }
-                largest.add(c); if (largest.size > 100) largest.poll()
-                val rel = c.absolutePath.removePrefix(rootCanon).removePrefix(root.absolutePath).trimStart('/')
-                val top = rel.substringBefore('/', "")
-                if (top.isNotEmpty() && rel.contains('/')) topLevel.getOrPut(top) { LongArray(2) }.let { it[0] += len; it[1]++ }
-                if (files % 200 == 0) onProgress(files, total)
+                if (largest.size < 100) largest.add(f) else if (len > largest.peek()!!.length()) { largest.poll(); largest.add(f) }
+                top?.let { t -> topLevel.getOrPut(t) { LongArray(2) }.let { it[0] += len; it[1]++ } }
+                if (files and 511 == 0) {
+                    val now = System.nanoTime()
+                    if (now - lastReport > 50_000_000) { lastReport = now; onProgress(files, total) }
+                    if (job?.isActive == false) return FileVisitResult.TERMINATE
+                }
+                return FileVisitResult.CONTINUE
             }
-        }
+        })
+        job?.let { if (!it.isActive) throw kotlinx.coroutines.CancellationException("Scan cancelled") }
         onProgress(files, total)
         return ScanResult(
             root = root.absolutePath,

@@ -99,6 +99,7 @@ import com.lyvt.files.core.storage.BatchRename
 import com.lyvt.files.core.storage.ConflictPolicy
 import com.lyvt.files.core.storage.FileItem
 import com.lyvt.files.core.storage.FileOperations
+import com.lyvt.files.core.storage.FastFs
 import com.lyvt.files.core.storage.FileSearch
 import com.lyvt.files.core.storage.Hashing
 import com.lyvt.files.core.storage.OpResult
@@ -136,10 +137,10 @@ class ExplorerState(private val scope: CoroutineScope, start: String) {
                 val d = File(path)
                 when {
                     !d.exists() -> null to "This folder no longer exists (drive removed or folder deleted)."
-                    d.listFiles() == null -> null to "Access denied. Windows does not allow reading this folder."
-                    else -> d.listFiles()!!.asSequence().filter { AppState.showHidden || !(it.isHidden || it.name.startsWith(".")) }
-                        .filterNot { it.name.endsWith(FileOperations.PART_SUFFIX) }
-                        .map { FileItem.from(it, countChildren = false) }.sortedWith(AppState.sort.comparator()).toList() to null
+                    else -> FastFs.list(d)?.let { list -> list.asSequence().filter { AppState.showHidden || !it.hidden }
+                        .filterNot { it.file.name.endsWith(FileOperations.PART_SUFFIX) }
+                        .map { it.toItem() }.sortedWith(AppState.sort.comparator()).toList() to null }
+                        ?: (null to "Access denied. Windows does not allow reading this folder.")
                 }
             }
             items.clear(); r.first?.let { items.addAll(it) }; error = r.second
@@ -262,7 +263,7 @@ fun ExplorerScreen(state: ExplorerState) {
 
     Row(Modifier.fillMaxSize()) {
         // Sidebar: quick access + drives
-        Column(Modifier.width(210.dp).fillMaxHeight().background(MaterialTheme.colorScheme.surfaceContainerLow).verticalScroll(rememberScrollState()).padding(10.dp)) {
+        Column(Modifier.width(250.dp).fillMaxHeight().background(MaterialTheme.colorScheme.surfaceContainerLow).verticalScroll(rememberScrollState()).padding(10.dp)) {
             Text("Quick access", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(8.dp))
             listOf("Home" to AppState.home, "Desktop" to AppState.knownFolder("Desktop"), "Documents" to AppState.knownFolder("Documents"),
                 "Downloads" to AppState.knownFolder("Downloads"), "Pictures" to AppState.knownFolder("Pictures"), "Music" to AppState.knownFolder("Music"),
@@ -305,9 +306,9 @@ fun ExplorerScreen(state: ExplorerState) {
                 IconButton(onClick = s::up) { Icon(Icons.Filled.ArrowUpward, "Up") }
                 IconButton(onClick = s::reload) { Icon(Icons.Filled.Refresh, "Refresh (F5)") }
                 Breadcrumbs(s.path, Modifier.weight(1f)) { s.open(it) }
-                OutlinedTextField(searchText, { searchText = it; s.runSearch(it) }, singleLine = true, placeholder = { Text("Search  ext:pdf  size>10mb") },
+                OutlinedTextField(searchText, { searchText = it; s.runSearch(it) }, singleLine = true, placeholder = { Text("Search in this folder…", maxLines = 1) },
                     leadingIcon = { Icon(Icons.Filled.Search, null) }, trailingIcon = { if (searchText.isNotEmpty()) IconButton(onClick = { searchText = ""; s.reload() }) { Icon(Icons.Filled.Close, null) } },
-                    shape = RoundedCornerShape(14.dp), modifier = Modifier.width(300.dp), textStyle = MaterialTheme.typography.bodyMedium)
+                    shape = RoundedCornerShape(14.dp), modifier = Modifier.width(340.dp), textStyle = MaterialTheme.typography.bodyMedium)
             }
             Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 ToolButton(Icons.Filled.CreateNewFolder, "New folder") { dialog = "mkdir" }

@@ -1,5 +1,12 @@
 package com.astrum.desktop
 
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -51,7 +58,10 @@ import com.lyvt.files.core.scan.ScanResult
 import com.lyvt.files.core.scan.StorageScanner
 import com.lyvt.files.core.storage.FileCategory
 import com.lyvt.files.core.storage.FileItem
+import com.lyvt.files.core.common.parMap
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -67,7 +77,7 @@ import javax.imageio.ImageIO
 object ImageAnalysis {
     private fun gray(f: File, w: Int, h: Int): IntArray? = runCatching {
         if (f.length() > 40L * 1024 * 1024) return null
-        val img = ImageIO.read(f) ?: return null
+        val img = Thumbs.decodeSmall(f, maxOf(w, h, 64)) ?: return null
         val s = java.awt.image.BufferedImage(w, h, java.awt.image.BufferedImage.TYPE_BYTE_GRAY)
         s.createGraphics().apply { setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION, java.awt.RenderingHints.VALUE_INTERPOLATION_BILINEAR); drawImage(img, 0, 0, w, h, null); dispose() }
         IntArray(w * h) { s.raster.getSample(it % w, it / w, 0) }
@@ -130,10 +140,10 @@ fun CleanerScreen() {
                     withContext(Dispatchers.Main) { selected.addAll(DuplicateFinder.defaultSelection(r)) } }
                     .map { CGroup("${it.files.size} copies · ${Formatters.size(it.size)} each", it.files.map { f -> FileItem.from(f) }, "SHA-256 ${it.hash.take(12)}…") }
                 CMode.SIMILAR -> { val imgs = files.filter { FileCategory.of(it.extension) == FileCategory.IMAGE && it.length() > 20_000 }.take(5000)
-                    val h = imgs.mapIndexedNotNull { i, f -> currentCoroutineContext().ensureActive(); if (i % 10 == 0) phase = "Analysing photos · $i of ${imgs.size}" to i.toFloat() / imgs.size; ImageAnalysis.dHash(f)?.let { f to it } }
+                    val h = parMap(imgs, { i -> phase = "Analysing photos · $i of ${imgs.size}" to i.toFloat() / imgs.size }) { f -> ImageAnalysis.dHash(f)?.let { f to it } }
                     ImageAnalysis.cluster(h, sim.toInt()).map { c -> CGroup("${c.size} similar photos", c.sortedByDescending { it.length() }.map { FileItem.from(it) }, "Visually similar — review before deleting") } }
                 CMode.BLURRY -> { val imgs = files.filter { FileCategory.of(it.extension) == FileCategory.IMAGE && it.length() > 20_000 }.take(4000)
-                    val b = imgs.mapIndexedNotNull { i, f -> currentCoroutineContext().ensureActive(); if (i % 10 == 0) phase = "Measuring sharpness · $i of ${imgs.size}" to i.toFloat() / imgs.size
+                    val b = parMap(imgs, { i -> phase = "Measuring sharpness · $i of ${imgs.size}" to i.toFloat() / imgs.size }) { f ->
                         ImageAnalysis.sharpness(f)?.takeIf { it < blur }?.let { f to it } }.sortedBy { it.second }
                     if (b.isEmpty()) emptyList() else listOf(CGroup("${b.size} possibly blurry photos", b.map { FileItem.from(it.first) }, "Heuristic (Laplacian variance) — artistic or low-detail shots may appear")) }
                 CMode.LARGE -> files.filter { it.length() >= largeMb.toLong() * 1024 * 1024 }.sortedByDescending { it.length() }.map { FileItem.from(it) }.groupBy { it.category }
@@ -157,7 +167,7 @@ fun CleanerScreen() {
     val selBytes = groups.flatMap { it.files }.distinctBy { it.path }.filter { it.path in selected }.sumOf { it.size }
 
     Row(Modifier.fillMaxSize()) {
-        Column(Modifier.width(300.dp).fillMaxHeight().verticalScroll(rememberScrollState()).padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(Modifier.width(380.dp).fillMaxHeight().verticalScroll(rememberScrollState()).padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Cleaner", style = MaterialTheme.typography.headlineMedium)
             Text("Nothing is deleted without your review. Deleted items go to the Recycle Bin.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             AstrumCard(padding = 12.dp) {
@@ -178,7 +188,7 @@ fun CleanerScreen() {
         VerticalDivider()
         Column(Modifier.weight(1f).fillMaxHeight().padding(18.dp)) {
             val m = mode
-            if (m == null) { EmptyState(Icons.Outlined.CheckCircle, "Choose a cleaner", "Pick a tool on the left. The first scan of a location is reused by all tools for 10 minutes."); return@Column }
+            if (m == null) { CleanerIntro { run(it) }; return@Column }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(m.title, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
                 if (job?.isActive == true) TextButton(onClick = { job?.cancel(); phase = null; status = "Cancelled" }) { Text("Cancel") } else TextButton(onClick = { run(m, true) }) { Text("Rescan") }
@@ -233,4 +243,43 @@ fun CleanerScreen() {
             }
         }, onDismiss = { confirm = false })
     }
+}
+
+
+@Composable
+private fun CleanerIntro(start: (CMode) -> Unit) = Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+    val drive = Scanner.root.toPath().root?.toFile()
+    AstrumCard(padding = 26.dp) {
+        Text("Free up space safely", style = MaterialTheme.typography.headlineSmall)
+        Text("Astrum looks for files you probably don't need. You always review the list first, and deleted items go to the Recycle Bin so you can restore them.",
+            style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
+        if (drive != null && drive.totalSpace > 0) {
+            val f = (drive.totalSpace - drive.usableSpace).toFloat() / drive.totalSpace
+            Row(Modifier.padding(top = 18.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("Drive ${drive.path}", style = MaterialTheme.typography.titleSmall, modifier = Modifier.width(110.dp))
+                LinearProgressIndicator(progress = { f }, modifier = Modifier.weight(1f).height(8.dp).clip(RoundedCornerShape(4.dp)), drawStopIndicator = {})
+                Text("  ${Formatters.size(drive.usableSpace)} free", style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+        Row(Modifier.padding(top = 18.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Button(onClick = { start(CMode.DUP) }) { Text("Find duplicates") }
+            OutlinedButton(onClick = { start(CMode.LARGE) }) { Text("Show large files") }
+        }
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        listOf(Triple("1", "Scan", "One fast pass over the location you chose. The result is reused by every tool for 10 minutes."),
+            Triple("2", "Review", "Groups with sizes and previews. Duplicates always keep one copy selected as the original."),
+            Triple("3", "Clean", "Selected files move to the Recycle Bin. Nothing is deleted silently.")).forEach { (n, t, d) ->
+            AstrumCard(Modifier.weight(1f), padding = 20.dp) {
+                Box(Modifier.size(34.dp).clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) {
+                    Text(n, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary) }
+                Text(t, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 10.dp))
+                Text(d, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+    Scanner.result?.let { r -> AstrumCard(padding = 22.dp) {
+        Text("Last scan", style = MaterialTheme.typography.titleMedium)
+        Text("${r.root} · ${"%,d".format(r.fileCount)} files · ${Formatters.size(r.totalBytes)} · ${r.emptyFolders.size} empty folders", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    } }
 }

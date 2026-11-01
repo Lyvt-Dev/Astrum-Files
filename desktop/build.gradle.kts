@@ -14,7 +14,9 @@ val sharedCore = listOf(
     "com/lyvt/files/core/common/Formatters.kt",
     "com/lyvt/files/core/network/Nearby.kt",
     "com/lyvt/files/core/common/NaturalOrder.kt",
+    "com/lyvt/files/core/common/Parallel.kt",
     "com/lyvt/files/core/storage/FileModels.kt",
+    "com/lyvt/files/core/storage/FastFs.kt",
     "com/lyvt/files/core/storage/FileOperations.kt",
     "com/lyvt/files/core/storage/BatchRename.kt",
     "com/lyvt/files/core/storage/FileSearch.kt",
@@ -55,7 +57,7 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Msi, TargetFormat.Exe, TargetFormat.Deb)
             packageName = "Astrum Files"
-            packageVersion = "1.1.0"
+            packageVersion = "1.2.0"
             description = "Astrum Files for Windows"
             vendor = "Astrum"
             includeAllModules = true // bundled runtime: no separate Java install needed
