@@ -22,6 +22,7 @@ import javax.inject.Inject
 @AndroidEntryPoint
 class MainActivity : FragmentActivity() {
     @Inject lateinit var settingsRepository: SettingsRepository
+    @Inject lateinit var updater: com.lyvt.files.core.update.AppUpdater
 
     /** Route requested by a widget or shortcut; consumed by the navigation host. */
     val pendingRoute = mutableStateOf<String?>(null)
@@ -37,6 +38,7 @@ class MainActivity : FragmentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         pendingRoute.value = intent?.getStringExtra(EXTRA_ROUTE)
+        updater.checkIfDue()
         setContent {
             val settings by settingsRepository.settings.collectAsStateWithLifecycle(initialValue = AppSettings())
             LyvtTheme(settings) {
@@ -48,6 +50,8 @@ class MainActivity : FragmentActivity() {
                         var intro by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(savedInstanceState == null) }
                         if (intro) com.lyvt.files.ui.SplashIntro(settings.reduceMotion) { intro = false }
                         if (settings.appLock && locked.value && !intro) com.lyvt.files.ui.AppLockScreen { locked.value = false }
+                        val update by updater.prompt.collectAsStateWithLifecycle()
+                        update?.let { u -> if (!intro) com.lyvt.files.ui.UpdateDialog(u, onInstall = { updater.downloadAndInstall(u) }, onLater = { updater.prompt.value = null }, onSkip = { updater.skip(u) }) }
                     }
                 }
             }

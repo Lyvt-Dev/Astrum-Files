@@ -30,6 +30,7 @@ class LyvtApp : Application(), androidx.work.Configuration.Provider {
 
     override fun onCreate() {
         super.onCreate()
+        com.lyvt.files.core.scan.DuplicateFinder.cache = com.lyvt.files.core.scan.HashCache(java.io.File(filesDir, "hash-cache.tsv"))
         // Auto-lock the vault after the app has been in background for the configured timeout.
         ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
             override fun onStop(owner: LifecycleOwner) {

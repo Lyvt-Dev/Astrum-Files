@@ -13,6 +13,7 @@ java { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaV
 val sharedCore = listOf(
     "com/lyvt/files/core/common/Formatters.kt",
     "com/lyvt/files/core/network/Nearby.kt",
+    "com/lyvt/files/core/update/UpdateCheck.kt",
     "com/lyvt/files/core/common/NaturalOrder.kt",
     "com/lyvt/files/core/common/Parallel.kt",
     "com/lyvt/files/core/storage/FileModels.kt",
@@ -22,6 +23,7 @@ val sharedCore = listOf(
     "com/lyvt/files/core/storage/FileSearch.kt",
     "com/lyvt/files/core/storage/Hashing.kt",
     "com/lyvt/files/core/scan/DuplicateFinder.kt",
+    "com/lyvt/files/core/scan/HashCache.kt",
     "com/lyvt/files/core/scan/StorageScanner.kt",
     "com/lyvt/files/core/organizer/OrganizerEngine.kt",
     "com/lyvt/files/core/archive/ArchiveManager.kt",
@@ -57,7 +59,7 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Msi, TargetFormat.Exe, TargetFormat.Deb)
             packageName = "Astrum Files"
-            packageVersion = "1.2.0"
+            packageVersion = "1.3.0"
             description = "Astrum Files for Windows"
             vendor = "Astrum"
             includeAllModules = true // bundled runtime: no separate Java install needed

@@ -117,3 +117,9 @@ MediaStore build (not implemented yet, see FEATURES.md).
 
 This is an original implementation. It contains no code, assets or branding from any other app. The icon is an
 original vector drawing.
+
+## Automatic updates
+Both apps check GitHub Releases of **Lyvt-Dev/Astrum-Files** once a day (can be turned off in Settings) and ask before installing.
+Publishing an update = pushing a tag; `.github/workflows/release.yml` builds and attaches the files:
+- Phone: bump `versionName` in `app/build.gradle.kts`, then `git tag android-v<version> && git push origin android-v<version>` (needs the signing secrets described in the workflow).
+- PC: bump `Updates.VERSION` (desktop/src/main/kotlin/com/astrum/desktop/Updates.kt) and `packageVersion`, then `git tag desktop-v<version> && git push origin desktop-v<version>`.

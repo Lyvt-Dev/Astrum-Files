@@ -71,8 +71,10 @@ import kotlinx.coroutines.delay
 
 fun main() {
     AppState.load(); Organizer.load(); Transfer.load(); runCatching { Snapshots.record() }
+    com.lyvt.files.core.scan.DuplicateFinder.cache = com.lyvt.files.core.scan.HashCache(java.io.File(Store.dir, "hash-cache.tsv"))
     // Optional start screen, e.g. -Dastrum.screen=FILES (used for screenshots / shortcuts).
     System.getProperty("astrum.screen")?.let { runCatching { AppState.screen = Screen.valueOf(it.uppercase()) } }
+    if (System.getProperty("astrum.noupdate") == null) Updates.checkIfDue()
     val skipIntro = System.getProperty("astrum.nointro") != null
     application {
         val state = rememberWindowState(size = DpSize(1480.dp, 920.dp))
@@ -85,7 +87,7 @@ fun main() {
             AstrumTheme(dark, AppState.accent) {
                 Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                     var intro by remember { mutableStateOf(!skipIntro) }
-                    Box(Modifier.fillMaxSize()) { App(); if (intro) Intro(AppState.reduceMotion) { intro = false } }
+                    Box(Modifier.fillMaxSize()) { App(); if (!intro) UpdatePrompt(); if (intro) Intro(AppState.reduceMotion) { intro = false } }
                 }
             }
         }

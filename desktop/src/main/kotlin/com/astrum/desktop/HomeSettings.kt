@@ -73,12 +73,13 @@ fun SettingsScreen() {
         item { AstrumCard { SectionHeader("Operation history")
             if (AppState.log.isEmpty()) Text("No operations in this session.", style = MaterialTheme.typography.bodySmall)
             AppState.log.take(40).forEach { Text("${if (it.ok) "✓" else "✗"} ${it.type} · ${it.summary} · ${Formatters.date(it.at)}", style = MaterialTheme.typography.bodySmall) } } }
+        item { UpdatesCard() }
         item { AstrumCard { SectionHeader("Data & privacy")
-            Text("Settings, rules and history are stored in ${Store.dir.absolutePath}. Astrum Files has no ads, no tracking and no account. Network is used only for Astrum Transfer sessions you start.",
+            Text("Settings, rules and history are stored in ${Store.dir.absolutePath}. Astrum Files has no ads, no tracking and no account. Network is used only for Astrum Transfer sessions you start and the daily update check (GitHub; can be turned off).",
                 style = MaterialTheme.typography.bodySmall)
             TextButton(onClick = { runCatching { java.awt.Desktop.getDesktop().open(Store.dir) } }) { Text("Open data folder") } } }
         item { AstrumCard { Row(verticalAlignment = Alignment.CenterVertically) { Image(painterResource("astrum.png"), null, Modifier.size(40.dp).clip(RoundedCornerShape(10.dp))); Spacer(Modifier.width(12.dp))
-            Column { Text("Astrum Files for Windows", style = MaterialTheme.typography.titleMedium); Text("Version 1.2.0 · Java ${System.getProperty("java.version")}", style = MaterialTheme.typography.labelSmall) } } } }
+            Column { Text("Astrum Files for Windows", style = MaterialTheme.typography.titleMedium); Text("Version ${Updates.VERSION} · Java ${System.getProperty("java.version")}", style = MaterialTheme.typography.labelSmall) } } } }
     }
 }
 

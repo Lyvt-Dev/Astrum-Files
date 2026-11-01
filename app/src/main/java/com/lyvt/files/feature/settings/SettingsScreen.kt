@@ -205,10 +205,11 @@ fun SettingsScreen(nav: NavHostController, vm: SettingsViewModel = hiltViewModel
                     TextButton(onClick = { nav.navigate(Routes.TIMELINE) }) { Text("Storage timeline") }
                 }
             }
+            item { UpdatesCard() }
             item {
                 LyvtCard {
                     SectionHeader(stringResource(R.string.about))
-                    Text("Astrum Files contains no ads, no trackers and no analytics. It never uploads anything unless you explicitly start a transfer. " +
+                    Text("Astrum Files contains no ads, no trackers and no analytics. It never uploads anything unless you explicitly start a transfer; the update check only asks GitHub for the latest version number. " +
                         "All scanning, hashing and image analysis run on this device.", style = MaterialTheme.typography.bodySmall)
                     Spacer(Modifier.size(6.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -263,5 +264,37 @@ fun HistoryScreen(nav: NavHostController, vm: SettingsViewModel = hiltViewModel(
                 }
             }
         }
+    }
+}
+
+@dagger.hilt.EntryPoint
+@dagger.hilt.InstallIn(dagger.hilt.components.SingletonComponent::class)
+interface UpdaterEntryPoint { fun updater(): com.lyvt.files.core.update.AppUpdater }
+
+@Composable
+private fun UpdatesCard() {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val updater = remember { dagger.hilt.android.EntryPointAccessors.fromApplication(ctx.applicationContext, UpdaterEntryPoint::class.java).updater() }
+    val st by updater.state.collectAsStateWithLifecycle()
+    var auto by remember { mutableStateOf(updater.autoCheck) }
+    LyvtCard {
+        SectionHeader("Updates")
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) { Text("Check for updates automatically", style = MaterialTheme.typography.bodyMedium)
+                Text("Once a day from GitHub (Lyvt-Dev/Astrum-Files). You always confirm before installing.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            androidx.compose.material3.Switch(auto, { auto = it; updater.autoCheck = it })
+        }
+        when (val s = st) {
+            is com.lyvt.files.core.update.UpdateState.Checking -> Text("Checking…", style = MaterialTheme.typography.bodySmall)
+            is com.lyvt.files.core.update.UpdateState.UpToDate -> Text("You have the latest version (${com.lyvt.files.BuildConfig.VERSION_NAME}).", style = MaterialTheme.typography.bodySmall)
+            is com.lyvt.files.core.update.UpdateState.Failed -> Text("Could not check: ${s.message}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+            is com.lyvt.files.core.update.UpdateState.Downloading -> { Text("Downloading ${s.info.version} · ${com.lyvt.files.core.common.Formatters.size(s.done)}${if (s.total > 0) " / " + com.lyvt.files.core.common.Formatters.size(s.total) else ""}", style = MaterialTheme.typography.bodySmall)
+                androidx.compose.material3.LinearProgressIndicator(progress = { if (s.total > 0) s.done.toFloat() / s.total else 0f }, modifier = Modifier.fillMaxWidth()) }
+            is com.lyvt.files.core.update.UpdateState.Available -> Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Version ${s.info.version} is available", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                androidx.compose.material3.Button(onClick = { updater.downloadAndInstall(s.info) }) { Text("Install") } }
+            else -> {}
+        }
+        TextButton(onClick = { updater.check() }) { Text("Check now") }
     }
 }

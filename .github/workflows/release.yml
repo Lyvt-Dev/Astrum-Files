@@ -1,0 +1,75 @@
+name: Release (auto-update)
+
+# Push a tag to publish an update that the installed apps pick up automatically:
+#   git tag android-v0.2.9 && git push origin android-v0.2.9   -> phone APK
+#   git tag desktop-v1.3.1 && git push origin desktop-v1.3.1   -> Windows installer
+# The tag version must match versionName (app/build.gradle.kts) / Updates.VERSION (desktop).
+#
+# Android signing (required, the update must be signed with the SAME key as the installed app):
+#   repo Settings -> Secrets and variables -> Actions -> add
+#   ANDROID_KEYSTORE_BASE64 (base64 of the .jks), ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD
+
+on:
+  push:
+    tags: [ "android-v*", "desktop-v*" ]
+
+permissions:
+  contents: write
+
+jobs:
+  android:
+    if: startsWith(github.ref_name, 'android-v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: "21" }
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Decode signing key
+        env: { KS: "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" }
+        run: |
+          if [ -z "$KS" ]; then echo "::error::ANDROID_KEYSTORE_BASE64 secret missing — see comments at the top of release.yml"; exit 1; fi
+          echo "$KS" | base64 -d > "$RUNNER_TEMP/release.jks"
+      - name: Test and build signed APK
+        env:
+          LYVT_KEYSTORE: ${{ runner.temp }}/release.jks
+          LYVT_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          LYVT_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          LYVT_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          ./gradlew :app:testDebugUnitTest :app:assembleRelease --no-daemon
+          V="${GITHUB_REF_NAME#android-v}"
+          cp app/build/outputs/apk/release/app-release.apk "AstrumFiles-$V.apk"
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: "Astrum Files for Android ${{ github.ref_name }}"
+          files: AstrumFiles-*.apk
+          generate_release_notes: true
+
+  desktop:
+    if: startsWith(github.ref_name, 'desktop-v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: "21" }
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Test and build app JAR (includes Windows natives)
+        run: ./gradlew :desktop:test :desktop:packageUberJarForCurrentOS --no-daemon
+      - name: Build Windows installer (NSIS, bundles a Java runtime)
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq nsis
+          V="${GITHUB_REF_NAME#desktop-v}"
+          mkdir -p payload
+          curl -sSL -o jre.zip "https://api.adoptium.net/v3/binary/latest/21/ga/windows/x64/jre/hotspot/normal/eclipse"
+          unzip -q jre.zip -d jretmp && mv jretmp/* payload/jre
+          cp desktop/build/compose/jars/*.jar payload/AstrumFiles.jar
+          cp desktop/src/main/resources/astrum.ico payload/
+          sed -i "s/[0-9]\+\.[0-9]\+\.[0-9]\+\(\.0\)\?/$V\1/g" desktop/installer/astrum.nsi
+          makensis -V2 -DPAYLOAD="$PWD/payload" -DOUTFILE="$PWD/AstrumFiles-Setup-$V.exe" desktop/installer/astrum.nsi
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: "Astrum Files for Windows ${{ github.ref_name }}"
+          files: AstrumFiles-Setup-*.exe
+          generate_release_notes: true

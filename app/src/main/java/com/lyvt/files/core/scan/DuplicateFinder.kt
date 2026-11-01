@@ -14,30 +14,42 @@ data class DuplicateGroup(val hash: String, val size: Long, val files: List<File
 }
 
 /**
- * Exact duplicate detection: (1) group by size, (2) filter by SHA-256 of the first 16 KiB, (3) full streaming
- * SHA-256, (4) byte-for-byte equality is implied by a full SHA-256 collision-resistant match.
+ * Exact duplicate detection, fastest checks first so most files are ruled out after reading very little:
+ *  (1) group by size (no reading), (2) hash of the first 16 KiB, (3) for files > 1 MiB: hash of 3 samples
+ *  (start / middle / end), (4) full streaming SHA-256 — only files that passed every check are read completely.
+ * Full hashes are remembered in [cache] (path + size + date), so repeated searches skip unchanged files.
  */
 object DuplicateFinder {
-    /** Parallel hashing (several files at once) — disks/SSDs are much faster with a few reads in flight. */
-    suspend fun find(files: List<File>, minSize: Long = 1, parallelism: Int = 4, onProgress: (Int, Int) -> Unit = { _, _ -> }): List<DuplicateGroup> = coroutineScope {
+    /** Set by the app (e.g. files dir / ~/.astrum) to remember hashes between runs. */
+    @Volatile var cache: HashCache? = null
+
+    suspend fun find(files: List<File>, minSize: Long = 1, parallelism: Int = 6, onProgress: (Int, Int) -> Unit = { _, _ -> }): List<DuplicateGroup> = coroutineScope {
         val bySize = files.asSequence().filter { it.isFile && it.length() >= minSize }.groupBy { it.length() }.filterValues { it.size > 1 }
         val candidates = bySize.values.sumOf { it.size }
         val processed = AtomicInteger(0)
+        val lastReport = java.util.concurrent.atomic.AtomicLong(0)
+        fun tick(n: Int) { val d = processed.addAndGet(n); val now = System.nanoTime()
+            if (now - lastReport.get() > 60_000_000 || d == candidates) { lastReport.set(now); onProgress(d, candidates) } }
         val io = Dispatchers.IO.limitedParallelism(parallelism)
+        val c = cache
         suspend fun hashAll(fs: List<File>, h: suspend (File) -> String): Map<String, List<File>> =
             fs.map { f -> async(io) { runCatching { h(f) }.getOrNull()?.let { it to f } } }.awaitAll().filterNotNull().groupBy({ it.first }, { it.second })
+        suspend fun full(f: File): String = c?.get(f) ?: Hashing.sha256(f).also { c?.put(f, it) }
         val groups = bySize.entries.map { (size, group) ->
             async {
-                val byPartial = hashAll(group) { Hashing.partial(it) }.filterValues { it.size > 1 }
                 val out = ArrayList<DuplicateGroup>()
-                for ((ph, pg) in byPartial) {
-                    val byFull = if (size <= 16 * 1024) mapOf(ph to pg) else hashAll(pg) { Hashing.sha256(it) }
-                    byFull.filterValues { it.size > 1 }.forEach { (h, fs) -> out += DuplicateGroup(h, size, fs.sortedBy { it.lastModified() }) }
-                }
-                onProgress(processed.addAndGet(group.size), candidates)
+                // Cached full hashes need no reading at all.
+                val (known, unknown) = if (c != null) group.partition { c.get(it) != null } else emptyList<File>() to group
+                var stage = if (known.size + unknown.size == known.size) emptyList() else hashAll(unknown) { Hashing.partial(it) }.filterValues { it.size > 1 || known.isNotEmpty() }.values.toList()
+                if (size > 1L shl 20) stage = stage.flatMap { g -> if (g.size > 1 || known.isNotEmpty()) hashAll(g) { Hashing.samples(it) }.values.filter { it.size > 1 || known.isNotEmpty() } else emptyList() }
+                val pool = stage.flatten() + known
+                val byFull: Map<String, List<File>> = if (size <= 16 * 1024 && known.isEmpty()) stage.associateBy { Hashing.partial(it[0]) } else hashAll(pool) { full(it) }
+                byFull.filterValues { it.size > 1 }.forEach { (h, fs) -> out += DuplicateGroup(h, size, fs.sortedBy { it.lastModified() }) }
+                tick(group.size)
                 out
             }
         }.awaitAll().flatten()
+        c?.save()
         groups.sortedByDescending { it.wasted }
     }
 
