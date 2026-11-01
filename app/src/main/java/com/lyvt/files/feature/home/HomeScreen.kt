@@ -2,6 +2,7 @@ package com.lyvt.files.feature.home
 
 import android.os.Environment
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -150,9 +151,10 @@ fun HomeScreen(nav: NavHostController, vm: HomeViewModel = hiltViewModel()) {
                                 list.filter { it.bytes > 0 }.forEach { s -> Box(Modifier.weight(s.bytes.toFloat() / total).fillMaxSize().background(s.category.color())) }
                             }
                             Spacer(Modifier.height(12.dp))
-                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                list.filter { it.category != FileCategory.OTHER }.forEach { s ->
-                                    CategoryChip(s.category, s.count, s.bytes) { nav.navigate(Routes.files(null, categoryQuery(s.category))) }
+                            list.filter { it.category != FileCategory.OTHER }.chunked(2).forEach { row ->
+                                Row(Modifier.fillMaxWidth().padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    row.forEach { s -> CategoryChip(s.category, s.count, s.bytes, Modifier.weight(1f)) { nav.navigate(Routes.files(null, categoryQuery(s.category))) } }
+                                    if (row.size == 1) Spacer(Modifier.weight(1f))
                                 }
                             }
                             Text("Based on the system media index; open Analytics for a full scan.", style = MaterialTheme.typography.labelSmall,
@@ -164,14 +166,24 @@ fun HomeScreen(nav: NavHostController, vm: HomeViewModel = hiltViewModel()) {
                     Column {
                         SectionHeader(stringResource(R.string.quick_access))
                         val root = Environment.getExternalStorageDirectory().absolutePath
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            QuickTile(stringResource(R.string.downloads), Icons.Filled.Download, Accents[0]) { nav.navigate(Routes.files("$root/${Environment.DIRECTORY_DOWNLOADS}")) }
-                            QuickTile("Camera", FileCategory.IMAGE.icon(), FileCategory.IMAGE.color()) { nav.navigate(Routes.files("$root/${Environment.DIRECTORY_DCIM}")) }
-                            QuickTile(stringResource(R.string.documents), FileCategory.DOCUMENT.icon(), FileCategory.DOCUMENT.color()) { nav.navigate(Routes.files("$root/${Environment.DIRECTORY_DOCUMENTS}")) }
-                            QuickTile(stringResource(R.string.apps), FileCategory.APK.icon(), FileCategory.APK.color()) { nav.navigate(Routes.files(root, "type:apk")) }
-                            QuickTile(stringResource(R.string.trash) + if (trash.first > 0) " · ${trash.first}" else "", Icons.Filled.Delete, FileCategory.OTHER.color()) { nav.navigate(Routes.TRASH) }
-                            QuickTile(stringResource(R.string.nav_vault), Icons.Outlined.Lock, Accents[2]) { nav.navigate(Routes.VAULT) }
-                            QuickTile(stringResource(R.string.history), Icons.Filled.History, Accents[1]) { nav.navigate(Routes.HISTORY) }
+                        val tiles: List<Triple<String, Pair<ImageVector, androidx.compose.ui.graphics.Color>, () -> Unit>> = listOf(
+                            Triple(stringResource(R.string.downloads), Icons.Filled.Download to Accents[0]) { nav.navigate(Routes.files("$root/${Environment.DIRECTORY_DOWNLOADS}")) },
+                            Triple("Camera", FileCategory.IMAGE.icon() to FileCategory.IMAGE.color()) { nav.navigate(Routes.files("$root/${Environment.DIRECTORY_DCIM}")) },
+                            Triple(stringResource(R.string.documents), FileCategory.DOCUMENT.icon() to FileCategory.DOCUMENT.color()) { nav.navigate(Routes.files("$root/${Environment.DIRECTORY_DOCUMENTS}")) },
+                            Triple(stringResource(R.string.apps), FileCategory.APK.icon() to FileCategory.APK.color()) { nav.navigate(Routes.files(root, "type:apk")) },
+                            Triple(stringResource(R.string.trash) + if (trash.first > 0) " ${trash.first}" else "", Icons.Filled.Delete to FileCategory.OTHER.color()) { nav.navigate(Routes.TRASH) },
+                            Triple(stringResource(R.string.nav_vault), Icons.Outlined.Lock to Accents[2]) { nav.navigate(Routes.VAULT) },
+                            Triple("History", Icons.Filled.History to Accents[1]) { nav.navigate(Routes.HISTORY) },
+                            Triple(stringResource(R.string.nav_cleaner), Icons.Filled.AutoAwesome to Accents[3]) { nav.navigate(Routes.CLEANER) },
+                        )
+                        LyvtCard(padding = 12.dp) {
+                            tiles.chunked(4).forEachIndexed { i, row ->
+                                if (i > 0) Spacer(Modifier.height(4.dp))
+                                Row(Modifier.fillMaxWidth()) {
+                                    row.forEach { (label, iv, action) -> QuickTile(label, iv.first, iv.second, Modifier.weight(1f), action) }
+                                    repeat(4 - row.size) { Spacer(Modifier.weight(1f)) }
+                                }
+                            }
                         }
                     }
                 }
@@ -259,26 +271,25 @@ fun categoryQuery(c: FileCategory) = when (c) {
 }
 
 @Composable
-private fun CategoryChip(c: FileCategory, count: Int, bytes: Long, onClick: () -> Unit) {
-    Row(Modifier.clip(RoundedCornerShape(16.dp)).background(c.color().copy(alpha = 0.1f))
-        .let { it }.padding(0.dp), verticalAlignment = Alignment.CenterVertically) {
-        TextButton(onClick = onClick) {
-            Icon(c.icon(), null, tint = c.color(), modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(6.dp))
-            Column {
-                Text(c.name.lowercase().replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurface)
-                Text("$count · ${Formatters.size(bytes)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
+private fun CategoryChip(c: FileCategory, count: Int, bytes: Long, modifier: Modifier, onClick: () -> Unit) {
+    Row(modifier.clip(RoundedCornerShape(16.dp)).background(c.color().copy(alpha = 0.12f)).clickable(onClick = onClick).padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically) {
+        Icon(c.icon(), null, tint = c.color(), modifier = Modifier.size(22.dp))
+        Spacer(Modifier.width(10.dp))
+        Column {
+            Text(c.name.lowercase().replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurface)
+            Text("$count · ${Formatters.size(bytes)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
         }
     }
 }
 
 @Composable
-private fun QuickTile(label: String, icon: ImageVector, tint: androidx.compose.ui.graphics.Color, onClick: () -> Unit) {
-    LyvtCard(Modifier.width(104.dp), padding = 12.dp, onClick = onClick) {
-        IconBadge(icon, tint, 40.dp)
-        Spacer(Modifier.height(10.dp))
-        Text(label, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+private fun QuickTile(label: String, icon: ImageVector, tint: androidx.compose.ui.graphics.Color, modifier: Modifier, onClick: () -> Unit) {
+    Column(modifier.clip(RoundedCornerShape(18.dp)).clickable(onClick = onClick).padding(vertical = 10.dp, horizontal = 2.dp),
+        horizontalAlignment = Alignment.CenterHorizontally) {
+        IconBadge(icon, tint, 48.dp)
+        Spacer(Modifier.height(8.dp))
+        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 

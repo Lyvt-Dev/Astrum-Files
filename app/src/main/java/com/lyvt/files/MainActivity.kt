@@ -22,7 +22,10 @@ class MainActivity : FragmentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             val settings by settingsRepository.settings.collectAsStateWithLifecycle(initialValue = AppSettings())
-            LyvtTheme(settings) { LyvtRoot(settings) }
+            LyvtTheme(settings) {
+                // Surface provides LocalContentColor = onBackground, so text is readable in both themes.
+                androidx.compose.material3.Surface(color = androidx.compose.material3.MaterialTheme.colorScheme.background) { LyvtRoot(settings) }
+            }
         }
     }
 }

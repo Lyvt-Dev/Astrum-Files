@@ -98,13 +98,13 @@ fun LyvtCard(modifier: Modifier = Modifier, padding: Dp = 18.dp, onClick: (() ->
         .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
         .let { if (onClick != null) it.combinedClickable(onClick = onClick) else it }
         .padding(padding)
-    Column(m, content = content)
+    androidx.compose.runtime.CompositionLocalProvider(androidx.compose.material3.LocalContentColor provides MaterialTheme.colorScheme.onSurface) { Column(m, content = content) }
 }
 
 @Composable
 fun SectionHeader(title: String, modifier: Modifier = Modifier, action: (@Composable () -> Unit)? = null) {
     Row(modifier.fillMaxWidth().padding(top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+        Text(title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
         action?.invoke()
     }
 }
